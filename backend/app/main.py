@@ -3,11 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import UPLOADS_DIR
+from app.core.config import UPLOADS_DIR, BASE_DIR
 from app.core.database import SessionLocal
 from app.core.init_db import init_db
 from app.core.timezone import get_arg_now_str
 from app.api.v1 import admin, reportes, catalogos
+from fastapi.responses import FileResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,3 +54,16 @@ def health_check():
         "app": "Control de Calidad - Fábrica de Muebles",
         "hora_argentina_gmt3": get_arg_now_str()
     }
+
+# Servir PWA React compilada si existe la carpeta frontend/dist
+FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    if (FRONTEND_DIST / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_spa(full_path: str):
+        target = FRONTEND_DIST / full_path
+        if full_path and target.exists() and target.is_file():
+            return FileResponse(target)
+        return FileResponse(FRONTEND_DIST / "index.html")

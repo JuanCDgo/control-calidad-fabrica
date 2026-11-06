@@ -50,7 +50,7 @@ def test_full_flow():
 
         print("\n=== 3. CRUD de Modelos de Mueble ===")
         nuevo_mod = {
-            "nombre": "Mesa Ratona Industrial 1.20m",
+            "nombre": f"Mesa Ratona Industrial {uuid.uuid4().hex[:6]}",
             "codigo": f"MRI-{uuid.uuid4().hex[:4].upper()}",
             "descripcion": "Hierro estructural y eucalipto entablonado"
         }
