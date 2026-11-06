@@ -3,11 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import UPLOADS_DIR, BASE_DIR
+from app.core.config import UPLOADS_DIR, BASE_DIR, PORT, SSL_CERT_PATH, SSL_KEY_PATH
 from app.core.database import SessionLocal
 from app.core.init_db import init_db
 from app.core.timezone import get_arg_now_str
 from app.api.v1 import admin, reportes, catalogos
+from generate_certs import get_local_ip
 from fastapi.responses import FileResponse
 
 @asynccontextmanager
@@ -53,6 +54,20 @@ def health_check():
         "status": "online",
         "app": "Control de Calidad - Fábrica de Muebles",
         "hora_argentina_gmt3": get_arg_now_str()
+    }
+
+@app.get("/api/server-info", tags=["Estado"])
+def server_info():
+    """Retorna la IP LAN dinámica actual y la URL completa del servidor para generación de QR."""
+    local_ip = get_local_ip()
+    use_ssl = SSL_CERT_PATH.exists() and SSL_KEY_PATH.exists()
+    protocol = "https" if use_ssl else "http"
+    return {
+        "local_ip": local_ip,
+        "port": PORT,
+        "protocol": protocol,
+        "server_url": f"{protocol}://{local_ip}:{PORT}",
+        "hora_gmt3": get_arg_now_str()
     }
 
 # Servir PWA React compilada si existe la carpeta frontend/dist

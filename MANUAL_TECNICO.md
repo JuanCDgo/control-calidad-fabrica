@@ -62,14 +62,22 @@ Si la red se corta a mitad de la subida, el operario reintentará la sincronizac
 
 ---
 
-## 4. Seguridad y Certificados SSL Locales
+## 4. Seguridad, Auto-SSL y Cambio Dinámico de Red
 Las PWAs y la API de cámara (`navigator.mediaDevices` y `capture="environment"`) exigen contextos seguros (`HTTPS`).
 
-El archivo `backend/generate_certs.py`:
-1. Detecta automáticamente la IP LAN de la máquina (ej: `192.168.8.101`).
-2. Genera una Autoridad Certificadora Raíz (`backend/certs/rootCA.crt`).
-3. Emite un certificado SSL de servidor (`cert.pem`, `key.pem`) con SANs (Subject Alternative Names) para `localhost`, `127.0.0.1` y la IP LAN.
-4. Si se instala `rootCA.crt` en los teléfonos de la empresa, los navegadores confían al 100% en el servidor sin emitir advertencias de seguridad.
+El archivo `backend/generate_certs.py` cuenta con **detección dinámica de cambio de red**:
+1. En cada inicio (`run_server.py` o `iniciar_servidor.bat`), detecta la IP LAN actual de la máquina conectada al WiFi de la fábrica o Ethernet.
+2. Compara la IP actual con `backend/certs/last_ip.txt`.
+3. **Si la IP cambió (por ejemplo al mudar la PC del hogar a la fábrica):**
+   * Conserva la Root CA (`rootCA.crt` y `rootCA.key`) para no invalidar instalaciones previas en los celulares.
+   * Regenera automáticamente el certificado de servidor (`cert.pem`, `key.pem`) con los Subject Alternative Names (SAN) actualizados para la nueva IP de la fábrica.
+   * Actualiza `last_ip.txt` y levanta FastAPI bajo HTTPS en la nueva dirección sin intervención manual.
+
+### Endpoint `/api/server-info` y QR Dinámico
+El backend expone `GET /api/server-info` informando:
+- `local_ip`: IP actual de la fábrica.
+- `server_url`: `https://<ip-fabrica>:8000`.
+- El frontend (React) utiliza la librería `qrcode.react` (`QRCodeSVG`) para renderizar un código QR gigante en el Panel de Administración basado en esta URL real del servidor, evitando que se use `localhost` cuando el supervisor ingresa desde la PC central.
 
 ---
 

@@ -10,8 +10,7 @@ from generate_certs import ensure_ssl_certificates, get_local_ip
 from app.core.config import HOST, PORT
 
 def run():
-    local_ip = get_local_ip()
-    cert_file, key_file = ensure_ssl_certificates()
+    cert_file, key_file, local_ip = ensure_ssl_certificates()
 
     use_ssl = cert_file.exists() and key_file.exists() and ("--no-ssl" not in sys.argv)
 

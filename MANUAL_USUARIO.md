@@ -11,10 +11,12 @@ Este manual explica cómo utilizar la aplicación tanto desde los teléfonos mó
 2. Abrí el navegador (Google Chrome o Edge) e ingresá a:
    `https://localhost:8000`
 
-### Desde los Celulares en la Fábrica
+### Desde los Celulares en la Fábrica (Escaneo QR en 1 toque)
 1. Conectá el teléfono a la red WiFi de la fábrica.
-2. Abrí Google Chrome e ingresá a la dirección IP de la PC central (el servidor te la muestra en pantalla al arrancar, por ejemplo: `https://192.168.8.101:8000`).
-3. *(Opcional pero recomendado)* Tocá los tres puntos de Chrome y seleccioná **"Agregar a la pantalla principal"** o **"Instalar aplicación"**. La app se comportará como una app instalada nativa, con ícono propio y a pantalla completa.
+2. En la pantalla de la computadora central (Panel Admin), hacé clic en el botón azul **"QR para Celulares"**.
+3. Abrí la cámara del celular y apuntá al código QR gigante en la pantalla.
+4. Tocá la notificación para abrir la página en Chrome.
+5. Tocá **"Instalar aplicación"** o **"Agregar a pantalla principal"**. ¡Listo! La app queda instalada con ícono propio y lista para trabajar offline.
 
 ---
 

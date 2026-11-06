@@ -28,6 +28,15 @@ def test_full_flow():
         print("Health OK:", data)
         assert "hora_argentina_gmt3" in data
 
+        print("\n=== 1.1. Server Info y Detección Dinámica de IP ===")
+        res_info = client.get("/api/server-info")
+        assert res_info.status_code == 200, res_info.text
+        info_data = res_info.json()
+        print("Server Info OK:", info_data)
+        assert "local_ip" in info_data
+        assert "server_url" in info_data
+        assert info_data["server_url"].startswith("http")
+
         print("\n=== 2. Verificación de Sectores Requeridos Poblados ===")
         res = client.get("/api/v1/admin/sectores")
         assert res.status_code == 200

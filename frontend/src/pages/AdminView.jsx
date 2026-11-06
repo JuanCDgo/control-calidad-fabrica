@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   fetchReportesAdmin,
   fetchModelosAdmin,
@@ -9,6 +10,7 @@ import {
   createSectorAdmin,
   updateSectorAdmin,
   deleteSectorAdmin,
+  fetchServerInfo,
   getApiBaseUrl
 } from '../services/api';
 import {
@@ -24,7 +26,11 @@ import {
   RefreshCw,
   Search,
   ExternalLink,
-  ZoomIn
+  ZoomIn,
+  QrCode,
+  Copy,
+  CheckCheck,
+  Smartphone
 } from 'lucide-react';
 
 export function AdminView({ backendReachable }) {
@@ -43,26 +49,31 @@ export function AdminView({ backendReachable }) {
   // Modal de Zoom de Foto
   const [zoomedPhoto, setZoomedPhoto] = useState(null);
 
-  // Modales de CRUD
+  // Modales de CRUD y QR
   const [modalModelo, setModalModelo] = useState({ isOpen: false, item: null });
   const [modalSector, setModalSector] = useState({ isOpen: false, item: null });
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [serverInfo, setServerInfo] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   // Cargas de datos
   const loadAll = async () => {
     if (!backendReachable) return;
     setIsLoading(true);
     try {
-      const [reps, mods, secs] = await Promise.all([
+      const [reps, mods, secs, sInfo] = await Promise.all([
         fetchReportesAdmin({
           sector_id: filtroSector || undefined,
           modelo_id: filtroModelo || undefined
         }),
         fetchModelosAdmin(false),
-        fetchSectoresAdmin(false)
+        fetchSectoresAdmin(false),
+        fetchServerInfo().catch(() => null)
       ]);
       setReportes(reps);
       setModelos(mods);
       setSectores(secs);
+      if (sInfo) setServerInfo(sInfo);
     } catch (err) {
       console.error('Error al cargar datos de admin:', err);
     } finally {
@@ -148,6 +159,29 @@ export function AdminView({ backendReachable }) {
 
   return (
     <div className="admin-container">
+      {/* TARJETA DESTACADA: QR PARA CELULARES */}
+      <div className="qr-access-card">
+        <div className="qr-card-info">
+          <div className="qr-card-badge">
+            <QrCode size={24} />
+          </div>
+          <div>
+            <h3 className="qr-card-title">Acceso Móvil para Operarios y Jefes</h3>
+            <p className="qr-card-subtitle">
+              IP Servidor: <strong className="ip-highlight">{serverInfo?.local_ip || 'Detectando IP...'}</strong> • Escaneá para abrir e instalar la PWA sin escribir la dirección.
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsQrModalOpen(true)}
+          className="btn-qr-giant"
+        >
+          <QrCode size={22} />
+          <span>QR para Celulares</span>
+        </button>
+      </div>
+
       {/* Pestañas Superiores */}
       <div className="admin-tabs">
         <button
@@ -421,6 +455,66 @@ export function AdminView({ backendReachable }) {
           onClose={() => setModalSector({ isOpen: false, item: null })}
           onSave={handleSaveSector}
         />
+      )}
+
+      {/* MODAL QR PARA CELULARES */}
+      {isQrModalOpen && (
+        <div className="modal-backdrop" onClick={() => setIsQrModalOpen(false)}>
+          <div className="modal-card qr-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-box">
+                <QrCode size={20} />
+                <h3>Código QR para Celulares</h3>
+              </div>
+              <button onClick={() => setIsQrModalOpen(false)} className="btn-close-modal">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="qr-modal-body">
+              <div className="qr-code-wrapper">
+                <QRCodeSVG
+                  value={serverInfo?.server_url || window.location.origin}
+                  size={240}
+                  level="M"
+                  includeMargin={true}
+                  bgColor="#ffffff"
+                  fgColor="#0f172a"
+                />
+              </div>
+
+              <div className="qr-url-box">
+                <span className="qr-url-text">{serverInfo?.server_url || window.location.origin}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(serverInfo?.server_url || window.location.origin);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="btn-copy-url"
+                >
+                  {copied ? <CheckCheck size={16} /> : <Copy size={16} />}
+                  <span>{copied ? 'Copiado' : 'Copiar'}</span>
+                </button>
+              </div>
+
+              <div className="qr-steps-list">
+                <div className="qr-step-item">
+                  <span className="step-num">1</span>
+                  <span>Conectá el celular a la red WiFi de la fábrica.</span>
+                </div>
+                <div className="qr-step-item">
+                  <span className="step-num">2</span>
+                  <span>Abrí la cámara nativa del celular y apuntá al código QR.</span>
+                </div>
+                <div className="qr-step-item">
+                  <span className="step-num">3</span>
+                  <span>Tocá el link para abrir la app y seleccioná <strong>"Instalar aplicación"</strong> en Chrome.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

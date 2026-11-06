@@ -62,6 +62,10 @@ export async function checkBackendHealth() {
   }
 }
 
+export async function fetchServerInfo() {
+  return request('/api/server-info');
+}
+
 export async function fetchCatalogosOffline() {
   return request('/api/v1/catalogos/offline');
 }
