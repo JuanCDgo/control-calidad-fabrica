@@ -47,13 +47,27 @@ Este manual explica cómo utilizar la aplicación tanto desde los teléfonos mó
 
 En la parte superior derecha de la aplicación podés alternar a la vista **"Admin PC"**.
 
-### Pestaña 1: Reportes de Calidad
+### Pestaña 1: Reportes de Calidad y Exportación
 * Vas a ver todos los defectos enviados por los operarios organizados en tarjetas con sus fotos.
 * Podés filtrar por **Sector de Planta** o por **Modelo de Mueble** para analizar en qué área se están repitiendo fallas.
+* **Exportar a Excel:** Al tocar el botón verde **"Exportar a Excel"**, se descarga un archivo `.csv` compatible con Excel en español (con codificación UTF-8 con BOM y separador `;`), con todos los reportes filtrados, fechas, sectores, modelos, cantidades, descripciones y enlaces directos a las fotos.
 * Al hacer clic sobre cualquier foto, se abre en **tamaño grande (Zoom)** para inspeccionar los detalles de la pieza dañada.
 * Cada reporte muestra dos horarios en formato argentino (24 horas):
   * **Captura en planta:** Momento exacto en que el operario sacó la foto en la máquina.
   * **Sincronizado en PC:** Momento en que impactó en la computadora central.
+
+### Pestaña 2: Dashboard / Métricas (Para Proyectar en TV)
+Diseñado especialmente para reuniones de producción, sala de capacitación y auditorías:
+* **Tarjetas KPI:** Muestra en números grandes el total de reportes, el sector con mayor cantidad de incidencias y el volumen de registros.
+* **Filtros rápidos de fecha:** Podés alternar en 1 toque entre *Hoy*, *Últimos 7 días*, *Este Mes* o *Todos*.
+* **Diagrama de Pareto (80/20):** Muestra los sectores ordenados de mayor a menor frecuencia en barras azules, y sobre ellos la curva naranja de porcentaje acumulado con la línea roja de corte al 80%. Esto permite mostrarle al equipo el 20% de las causas que generan el 80% de los problemas en planta.
+* **Gráfico de Dona (Modelos):** Proporción de fallas según el modelo de mueble fabricado.
+* **Modo Edición de Textos (Cero Textos Hardcodeados):**
+  1. Tocá el botón **"Editar Textos"** en la barra superior del tablero.
+  2. Todos los títulos, subtítulos y nombres de KPI aparecerán con un subrayado amarillo.
+  3. Hacé clic sobre cualquiera de ellos y escribí la terminología exacta que querés mostrar en la reunión (ej: cambiar *"Frecuencia de Defectos"* por *"No Conformidades de Carpintería"*).
+  4. Al tocar Enter o volver a pulsar "Listo", los cambios se guardan de forma permanente en tu navegador para futuras reuniones.
+  5. Contás también con un botón de reinicio para volver a los textos estándar si lo deseás.
 
 ### Pestaña 2: Gestión de Modelos de Muebles
 * **Agregar nuevo:** Tocá `+ Nuevo Modelo`, completá el nombre, código SKU y descripción, y tocá Guardar.

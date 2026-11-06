@@ -13,6 +13,8 @@ import {
   fetchServerInfo,
   getApiBaseUrl
 } from '../services/api';
+import { exportarReportesAExcel } from '../utils/exportExcel';
+import { DashboardView } from '../components/DashboardView';
 import {
   ClipboardList,
   Layers,
@@ -30,7 +32,9 @@ import {
   QrCode,
   Copy,
   CheckCheck,
-  Smartphone
+  Smartphone,
+  BarChart3,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export function AdminView({ backendReachable }) {
@@ -205,6 +209,13 @@ export function AdminView({ backendReachable }) {
           <MapPin size={18} />
           <span>Sectores de Planta ({sectores.length})</span>
         </button>
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className={`admin-tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
+        >
+          <BarChart3 size={18} />
+          <span>Dashboard & Pareto</span>
+        </button>
       </div>
 
       {!backendReachable && (
@@ -246,6 +257,15 @@ export function AdminView({ backendReachable }) {
 
               <button onClick={loadAll} className="btn-secondary-sm" title="Refrescar">
                 <RefreshCw size={14} className={isLoading ? 'spin-icon' : ''} />
+              </button>
+
+              <button
+                onClick={() => exportarReportesAExcel(reportes, apiBase)}
+                className="btn-export-excel"
+                title="Descargar reportes filtrados a Excel (.csv con delimitador ; y formato UTF-8)"
+              >
+                <FileSpreadsheet size={16} />
+                <span>Exportar a Excel</span>
               </button>
             </div>
           </div>
@@ -424,6 +444,17 @@ export function AdminView({ backendReachable }) {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* CONTENIDO TAB 4: DASHBOARD & PARETO */}
+      {activeTab === 'dashboard' && (
+        <div className="tab-pane">
+          <DashboardView
+            reportes={reportes}
+            sectores={sectores}
+            modelos={modelos}
+          />
         </div>
       )}
 

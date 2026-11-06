@@ -81,7 +81,27 @@ El backend expone `GET /api/server-info` informando:
 
 ---
 
-## 5. Procedimiento de Respaldos (Backups)
+## 5. Dashboard de Métricas, Pareto y Exportación
+
+### Diagrama de Pareto (ComposedChart de Recharts)
+* **Cálculo:** Agrupa las fallas por Sector, las ordena de mayor a menor frecuencia, computa la suma acumulada y el porcentaje sobre el total filtrado (`(acumulado / total) * 100`).
+* **Visualización:**
+  * Eje Y Izquierdo: Frecuencia absoluta (Barras azules).
+  * Eje Y Derecho: Porcentaje acumulado (0 a 100%, Línea ámbar).
+  * `ReferenceLine`: Línea de referencia al 80% que demarca visualmente las causas vitales (Regla 80/20).
+
+### Textos Editables en Caliente (Persistencia Local)
+* Gestionado por el módulo `frontend/src/utils/dashboardConfig.js` y el componente `EditableText.jsx`.
+* Los títulos de KPIs, encabezados y nombres de series se almacenan en `localStorage` bajo la clave `dashboard_textos_config_v1`.
+* No existen textos fijos ni hardcodeados en el dashboard; el usuario puede modificarlos en vivo y conservarlos entre sesiones.
+
+### Exportación a Excel (.csv compatible con Microsoft Excel)
+* Implementado en `frontend/src/utils/exportExcel.js`.
+* Emite un archivo con encabezado `\uFEFF` (Byte Order Mark UTF-8) y separador `;` para compatibilidad nativa con Microsoft Excel en español sin requerir asistentes de importación.
+
+---
+
+## 6. Procedimiento de Respaldos (Backups)
 Para hacer una copia de seguridad total del sistema, solo se requieren dos carpetas:
 1. `backend/data/calidad.db` (y archivos `-wal` / `-shm` si el servidor está en marcha).
 2. `backend/uploads/` (donde se encuentran organizadas todas las fotos de los reportes).
