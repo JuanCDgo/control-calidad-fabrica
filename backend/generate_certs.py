@@ -53,7 +53,7 @@ def generate_local_ca_and_cert_python(local_ip: str):
     Incluye localhost, 127.0.0.1 y la IP LAN del equipo en los SAN (Subject Alternative Names).
     """
     from cryptography import x509
-    from cryptography.x509.oid import NameOID
+    from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
 
@@ -123,9 +123,27 @@ def generate_local_ca_and_cert_python(local_ip: str):
         .public_key(server_key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(days=1))
-        .not_valid_after(now + timedelta(days=1825)) # 5 años
+        .not_valid_after(now + timedelta(days=397))  # Estándar estricto Chrome/Android/Apple (<= 398 días)
         .add_extension(x509.SubjectAlternativeName(san_list), critical=False)
         .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=True,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]),
+            critical=False,
+        )
         .sign(ca_key, hashes.SHA256())
     )
 
@@ -156,11 +174,26 @@ def generate_local_ca_and_cert_python(local_ip: str):
     print(f" - Root CA instalable en celulares: {CA_CERT_FILE}")
 
 def should_regenerate_certs(current_ip: str) -> bool:
-    """Comprueba si los certificados no existen o si la IP de la red cambió."""
+    """Comprueba si los certificados no existen, si la IP cambió o si el cert no cumple los estándares modernos."""
     if not (CERT_FILE.exists() and KEY_FILE.exists()):
         return True
     if not LAST_IP_FILE.exists():
         return True
+    try:
+        from cryptography import x509
+        cert_bytes = CERT_FILE.read_bytes()
+        cert = x509.load_pem_x509_certificate(cert_bytes)
+        # Si la validez supera los 400 días o falta ExtendedKeyUsage, regenerar con estándares modernos
+        duracion_dias = (cert.not_valid_after_utc - cert.not_valid_before_utc).days
+        if duracion_dias > 400:
+            return True
+        try:
+            cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
+        except x509.ExtensionNotFound:
+            return True
+    except Exception:
+        return True
+
     try:
         last_saved_ip = LAST_IP_FILE.read_text(encoding="utf-8").strip()
         if last_saved_ip != current_ip:

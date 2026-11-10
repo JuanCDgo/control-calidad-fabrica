@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Server, Check } from 'lucide-react';
+import { X, Server, Check, ShieldCheck, Download } from 'lucide-react';
 import { getApiBaseUrl, setCustomBackendUrl } from '../services/api';
 
 export function SettingsModal({ isOpen, onClose, onSaved }) {
@@ -51,6 +51,17 @@ export function SettingsModal({ isOpen, onClose, onSaved }) {
           <div className="current-url-indicator">
             <span>URL Activa:</span>
             <code>{getApiBaseUrl()}</code>
+          </div>
+
+          <div className="cert-settings-box">
+            <div className="cert-settings-info">
+              <ShieldCheck size={16} />
+              <span>¿Chrome muestra alerta de seguridad o no deja instalar la PWA?</span>
+            </div>
+            <a href={`${getApiBaseUrl()}/api/ca-cert`} className="btn-cert-download">
+              <Download size={16} />
+              <span>Descargar Certificado SSL (.crt)</span>
+            </a>
           </div>
 
           <div className="modal-footer-buttons">

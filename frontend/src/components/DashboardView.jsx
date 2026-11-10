@@ -62,14 +62,21 @@ export function DashboardView({ reportes = [], sectores = [], modelos = [] }) {
     }
   };
 
-  // Filtrado de reportes por fecha
+  // Excluir estrictamente reportes de muestra/ejemplo de todos los KPIs y gráficos
+  const reportesReales = useMemo(
+    () => (reportes || []).filter((rep) => !rep.es_ejemplo),
+    [reportes]
+  );
+  const cantidadEjemplosExcluidos = (reportes || []).length - reportesReales.length;
+
+  // Filtrado de reportes reales por fecha
   const filteredReports = useMemo(() => {
-    if (dateFilter === 'todos') return reportes;
+    if (dateFilter === 'todos') return reportesReales;
 
     const now = new Date();
     const hoyStr = now.toISOString().slice(0, 10); // YYYY-MM-DD
 
-    return reportes.filter((rep) => {
+    return reportesReales.filter((rep) => {
       const fecha = rep.fecha_captura_local || rep.fecha_sincronizacion || '';
       const repFechaStr = fecha.slice(0, 10);
 
@@ -90,7 +97,7 @@ export function DashboardView({ reportes = [], sectores = [], modelos = [] }) {
 
       return true;
     });
-  }, [reportes, dateFilter]);
+  }, [reportesReales, dateFilter]);
 
   // Cálculos de KPIs
   const totalReportes = filteredReports.length;
@@ -219,6 +226,12 @@ export function DashboardView({ reportes = [], sectores = [], modelos = [] }) {
       {isEditMode && (
         <div className="edit-mode-notice">
           ✏️ <strong>Modo Edición Activo:</strong> Hacé clic sobre cualquier título, etiqueta o descripción marcada con subrayado para escribir tu propia terminología antes de proyectar.
+        </div>
+      )}
+
+      {cantidadEjemplosExcluidos > 0 && (
+        <div className="dashboard-sample-notice">
+          Los registros de ejemplo ({cantidadEjemplosExcluidos}) se muestran como guía en Reportes pero quedan excluidos de todas las métricas.
         </div>
       )}
 

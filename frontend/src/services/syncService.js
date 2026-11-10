@@ -12,7 +12,12 @@ export async function sincronizarCatalogos() {
   try {
     const data = await fetchCatalogosOffline();
     if (data && data.sectores && data.modelos) {
-      await guardarCatalogosCache(data.sectores, data.modelos, data.servidor_timestamp_gmt3);
+      await guardarCatalogosCache(
+        data.sectores,
+        data.modelos,
+        data.servidor_timestamp_gmt3,
+        data.categorias || []
+      );
       return { ok: true, data };
     }
   } catch (err) {

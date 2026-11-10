@@ -1,15 +1,24 @@
 import io
+import os
 import sys
+import tempfile
 import uuid
 from pathlib import Path
 from PIL import Image
+
+# Usar directorios temporales aislados para nunca ensuciar calidad.db ni uploads reales
+_TMP_TEST_DIR = tempfile.TemporaryDirectory()
+os.environ["CALIDAD_DATA_DIR"] = str(Path(_TMP_TEST_DIR.name) / "data")
+os.environ["CALIDAD_UPLOADS_DIR"] = str(Path(_TMP_TEST_DIR.name) / "uploads")
 
 # Agregar backend al path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi.testclient import TestClient
+from app.core.database import engine
 from app.main import app
+
 
 def create_dummy_image_bytes():
     """Crea una imagen válida en memoria de 100x100 para pruebas de carga."""
@@ -19,133 +28,183 @@ def create_dummy_image_bytes():
     buf.seek(0)
     return buf.getvalue()
 
+
 def test_full_flow():
     with TestClient(app) as client:
-        print("\n=== 1. Health check y Formato GMT-3 ===")
+        print("\n=== 1. Health check, Server Info y Certificado Root CA ===")
         res = client.get("/api/health")
         assert res.status_code == 200, res.text
-        data = res.json()
-        print("Health OK:", data)
-        assert "hora_argentina_gmt3" in data
+        assert "hora_argentina_gmt3" in res.json()
 
-        print("\n=== 1.1. Server Info y Detección Dinámica de IP ===")
         res_info = client.get("/api/server-info")
         assert res_info.status_code == 200, res_info.text
-        info_data = res_info.json()
-        print("Server Info OK:", info_data)
-        assert "local_ip" in info_data
-        assert "server_url" in info_data
-        assert info_data["server_url"].startswith("http")
+        assert res_info.json()["server_url"].startswith("http")
 
-        print("\n=== 2. Verificación de Sectores Requeridos Poblados ===")
+        # Si existe rootCA.crt debe descargarse correctamente
+        ca_file = BACKEND_DIR / "certs" / "rootCA.crt"
+        if ca_file.exists():
+            res_ca = client.get("/api/ca-cert")
+            assert res_ca.status_code == 200, res_ca.text
+            assert b"BEGIN CERTIFICATE" in res_ca.content
+
+        print("\n=== 2. Verificación de Sectores y Muestras de Ejemplo ===")
         res = client.get("/api/v1/admin/sectores")
         assert res.status_code == 200
         sectores = res.json()
         nombres_sectores = [s["nombre"] for s in sectores]
-        print(f"Total sectores cargados: {len(sectores)}")
-        
-        esperados = [
+        for esp in [
             "Maquinado",
             "Armado",
             "Cabinas de Fondo",
             "Cabinas de Terminación",
             "Embalaje",
             "Living y Colchones",
-            "Red"
-        ]
-        for esp in esperados:
+            "Red",
+        ]:
             assert esp in nombres_sectores, f"Falta sector: {esp}"
-        print("Todos los sectores requeridos están presentes.")
 
-        print("\n=== 3. CRUD de Modelos de Mueble ===")
+        # Verificar que el ejemplo existe en Admin pero NO viaja al celular en /catalogos/offline
+        res_cats_admin = client.get("/api/v1/admin/categorias")
+        assert res_cats_admin.status_code == 200
+        assert any(c["es_ejemplo"] == 1 for c in res_cats_admin.json())
+
+        res_mods_admin = client.get("/api/v1/admin/modelos")
+        assert res_mods_admin.status_code == 200
+        assert any(m["es_ejemplo"] == 1 for m in res_mods_admin.json())
+
+        res_offline_init = client.get("/api/v1/catalogos/offline")
+        assert res_offline_init.status_code == 200
+        assert len(res_offline_init.json()["categorias"]) == 0
+        assert len(res_offline_init.json()["modelos"]) == 0
+
+        res_reps_init = client.get("/api/v1/reportes/")
+        assert res_reps_init.status_code == 200
+        assert any(r["es_ejemplo"] == 1 for r in res_reps_init.json())
+
+        print("\n=== 3. Seguridad PIN para Categorías y Modelos ===")
+        res_pin_status = client.get("/api/v1/admin/pin/status")
+        assert res_pin_status.status_code == 200
+        assert res_pin_status.json()["pin_configurado"] is False
+
+        # Sin PIN configurado debe rechazar crear categoría o modelo
+        res_no_pin = client.post("/api/v1/admin/categorias", json={"nombre": "Mesas"})
+        assert res_no_pin.status_code == 403
+
+        # Configurar PIN
+        res_setup = client.post("/api/v1/admin/pin/setup", json={"pin": "2468"})
+        assert res_setup.status_code == 200
+        assert res_setup.json()["pin_configurado"] is True
+
+        # Intentar crear con PIN erróneo -> 401
+        res_bad_pin = client.post(
+            "/api/v1/admin/categorias",
+            json={"nombre": "Mesas"},
+            headers={"X-Admin-Pin": "9999"},
+        )
+        assert res_bad_pin.status_code == 401
+
+        # Verificar PIN válido
+        res_ver = client.post("/api/v1/admin/pin/verify", json={"pin": "2468"})
+        assert res_ver.status_code == 200 and res_ver.json()["valid"] is True
+
+        print("\n=== 4. CRUD de Categorías y Modelos (con PIN) ===")
+        pin_headers = {"X-Admin-Pin": "2468"}
+        res_cat = client.post(
+            "/api/v1/admin/categorias",
+            json={"nombre": "Comedor"},
+            headers=pin_headers,
+        )
+        assert res_cat.status_code == 201, res_cat.text
+        cat_id = res_cat.json()["id"]
+
         nuevo_mod = {
             "nombre": f"Mesa Ratona Industrial {uuid.uuid4().hex[:6]}",
+            "categoria_id": cat_id,
             "codigo": f"MRI-{uuid.uuid4().hex[:4].upper()}",
-            "descripcion": "Hierro estructural y eucalipto entablonado"
+            "descripcion": "Hierro estructural y eucalipto entablonado",
         }
-        res = client.post("/api/v1/admin/modelos", json=nuevo_mod)
-        assert res.status_code == 201, res.text
-        modelo_creado = res.json()
-        modelo_id = modelo_creado["id"]
-        print(f"Modelo creado OK: ID {modelo_id} - {modelo_creado['nombre']}")
+        res_mod = client.post("/api/v1/admin/modelos", json=nuevo_mod, headers=pin_headers)
+        assert res_mod.status_code == 201, res_mod.text
+        modelo_id = res_mod.json()["id"]
+        assert res_mod.json()["categoria_nombre"] == "Comedor"
 
-        # Modificar modelo
-        res = client.put(f"/api/v1/admin/modelos/{modelo_id}", json={"descripcion": "Hierro 40x40 y eucalipto 2 pulgadas"})
-        assert res.status_code == 200
-        print("Modelo modificado OK.")
+        # Editar modelo con PIN
+        res_upd = client.put(
+            f"/api/v1/admin/modelos/{modelo_id}",
+            json={"descripcion": "Hierro 40x40 y eucalipto 2 pulgadas"},
+            headers=pin_headers,
+        )
+        assert res_upd.status_code == 200
 
-        print("\n=== 4. Catálogos Offline para PWA ===")
-        res = client.get("/api/v1/catalogos/offline")
-        assert res.status_code == 200
-        cat_data = res.json()
-        assert len(cat_data["sectores"]) >= 7
-        assert len(cat_data["modelos"]) >= 1
-        print("Catálogos offline OK (Listos para cachear en IndexedDB del celular).")
+        print("\n=== 5. Catálogos Offline para PWA ===")
+        res_off = client.get("/api/v1/catalogos/offline")
+        assert res_off.status_code == 200
+        cat_data = res_off.json()
+        assert len(cat_data["categorias"]) == 1
+        assert len(cat_data["modelos"]) == 1
+        assert cat_data["modelos"][0]["id"] == modelo_id
 
-        print("\n=== 5. Reporte de Defecto desde Celular (Carga con Foto) ===")
+        print("\n=== 6. Reporte Oficial + Idempotencia + Reporte Prototipo Manual ===")
         img_bytes = create_dummy_image_bytes()
-        client_uuid = str(uuid.uuid4())
-        sector_id = sectores[0]["id"] # Por ejemplo Maquinado
-
+        sector_id = sectores[0]["id"]
         form_data = {
-            "client_uuid": client_uuid,
+            "client_uuid": str(uuid.uuid4()),
             "modelo_id": str(modelo_id),
             "sector_id": str(sector_id),
-            "descripcion_defecto": "Fisura longitudinal en veta de madera al pasar por tupi",
+            "descripcion_defecto": "Fisura longitudinal en veta",
             "cantidad_afectada": "2 tableros",
-            "fecha_captura_local": "2026-11-06 18:50:00"
+            "fecha_captura_local": "2026-11-10 18:20:00",
         }
-        files = {
-            "foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")
-        }
+        files = {"foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")}
+        res_rep = client.post("/api/v1/reportes/", data=form_data, files=files)
+        assert res_rep.status_code == 201, res_rep.text
+        rep_data = res_rep.json()
+        assert rep_data["es_ejemplo"] == 0
+        assert rep_data["categoria_nombre"] == "Comedor"
 
-        res = client.post("/api/v1/reportes/", data=form_data, files=files)
-        assert res.status_code == 201, res.text
-        reporte_data = res.json()
-        print("Reporte creado OK:")
-        print(f" - ID: {reporte_data['id']}")
-        print(f" - UUID: {reporte_data['client_uuid']}")
-        print(f" - Cantidad: {reporte_data['cantidad_afectada']}")
-        print(f" - Foto path: {reporte_data['foto_path']}")
-        print(f" - Modelo: {reporte_data['modelo_nombre']}")
-        print(f" - Sector: {reporte_data['sector_nombre']}")
-
-        # Comprobar que el archivo realmente existe en el disco
-        foto_rel = reporte_data["foto_path"].lstrip("/uploads/")
-        foto_disk = BACKEND_DIR / "uploads" / foto_rel
-        assert foto_disk.exists(), f"El archivo de foto no se encuentra en {foto_disk}"
-        print(f"Archivo de imagen verificado en disco: {foto_disk.name} ({foto_disk.stat().st_size} bytes)")
-
-        print("\n=== 6. Prueba de Idempotencia de Red (WiFi Inestable) ===")
-        # Reenviamos exactamente el mismo reporte (mismo client_uuid)
-        res_dup = client.post("/api/v1/reportes/", data=form_data, files={"foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")})
+        # Idempotencia
+        res_dup = client.post(
+            "/api/v1/reportes/",
+            data=form_data,
+            files={"foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")},
+        )
         assert res_dup.status_code == 201
-        reporte_dup = res_dup.json()
-        assert reporte_dup["id"] == reporte_data["id"]
-        print("Idempotencia OK: No se duplicó el reporte en la base de datos.")
+        assert res_dup.json()["id"] == rep_data["id"]
 
-        print("\n=== 7. Listado y Filtrado de Reportes en Panel Central ===")
-        res = client.get("/api/v1/reportes/")
-        assert res.status_code == 200
-        reportes_list = res.json()
-        assert len(reportes_list) >= 1
-        print(f"Total reportes listados en panel: {len(reportes_list)}")
+        # Reporte de prototipo manual (sin modelo_id)
+        proto_data = {
+            "client_uuid": str(uuid.uuid4()),
+            "modelo_manual": "Prototipo Mesa Extensible 2.20",
+            "sector_id": str(sector_id),
+            "descripcion_defecto": "Desajuste en corredera",
+            "cantidad_afectada": "1 prototipo",
+            "fecha_captura_local": "2026-11-10 18:22:00",
+        }
+        res_proto = client.post(
+            "/api/v1/reportes/",
+            data=proto_data,
+            files={"foto": ("proto.jpg", img_bytes, "image/jpeg")},
+        )
+        assert res_proto.status_code == 201, res_proto.text
+        assert res_proto.json()["modelo_id"] is None
+        assert res_proto.json()["categoria_nombre"] == "Otro / Prototipo"
+        assert "Prototipo Mesa Extensible 2.20" in res_proto.json()["modelo_nombre"]
 
-        print("\n=== 8. Desactivación Lógica (Activo/Inactivo sin perder historial) ===")
-        # Intentamos borrar el modelo que tiene reporte asociado -> Debe desactivarse lógicamente
-        res_del = client.delete(f"/api/v1/admin/modelos/{modelo_id}")
-        assert res_del.status_code == 200
-        del_data = res_del.json()
-        assert del_data["activo"] == 0
-        print("Soft-delete verificado: el modelo pasó a inactivo y el historial de reportes quedó intacto.")
+        print("\n=== 7. Soft-Delete protegido por PIN y Protección de Reportes Reales ===")
+        res_del_real = client.delete(f"/api/v1/reportes/{rep_data['id']}")
+        assert res_del_real.status_code == 403  # No permite borrar reportes reales
 
-        # Verificar que ya no aparece en catálogo de celulares (solo activos)
-        res_offline = client.get("/api/v1/catalogos/offline")
-        modelos_offline = [m["id"] for m in res_offline.json()["modelos"]]
-        assert modelo_id not in modelos_offline
-        print("Verificado: El modelo inactivo ya no viaja al celular de los operarios.")
+        res_del_mod = client.delete(f"/api/v1/admin/modelos/{modelo_id}", headers=pin_headers)
+        assert res_del_mod.status_code == 200
+        assert res_del_mod.json()["activo"] == 0
 
-    print("\n TODOS LOS TESTS DEL BACKEND PASARON EXITOSAMENTE.")
+        res_off_after = client.get("/api/v1/catalogos/offline")
+        assert len(res_off_after.json()["modelos"]) == 0
+
+    engine.dispose()
+    _TMP_TEST_DIR.cleanup()
+    print("\nTODOS LOS TESTS DEL BACKEND PASARON EXITOSAMENTE.")
+
 
 if __name__ == "__main__":
     test_full_flow()

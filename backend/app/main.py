@@ -1,9 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import UPLOADS_DIR, BASE_DIR, PORT, SSL_CERT_PATH, SSL_KEY_PATH
+from app.core.config import UPLOADS_DIR, BASE_DIR, PORT, SSL_CERT_PATH, SSL_KEY_PATH, CERTS_DIR
 from app.core.database import SessionLocal
 from app.core.init_db import init_db
 from app.core.timezone import get_arg_now_str
@@ -69,6 +69,18 @@ def server_info():
         "server_url": f"{protocol}://{local_ip}:{PORT}",
         "hora_gmt3": get_arg_now_str()
     }
+
+@app.get("/api/ca-cert", tags=["Estado"])
+def download_root_ca():
+    """Descarga el certificado Root CA local para instalar en celulares Android/iOS y PCs."""
+    ca_path = CERTS_DIR / "rootCA.crt"
+    if not ca_path.exists():
+        raise HTTPException(status_code=404, detail="Certificado Root CA no encontrado en el servidor.")
+    return FileResponse(
+        path=str(ca_path),
+        media_type="application/x-x509-ca-cert",
+        filename="FabricaCalidadRootCA.crt"
+    )
 
 # Servir PWA React compilada si existe la carpeta frontend/dist
 FRONTEND_DIST = BASE_DIR.parent / "frontend" / "dist"

@@ -1,9 +1,10 @@
 # Manual Técnico - Control de Calidad Fábrica de Muebles
 
 ## 1. Arquitectura del Sistema
-El sistema está diseñado bajo una arquitectura **Offline-First** desacoplada pero desplegable de forma unificada:
-- **Frontend (PWA Móvil y PC):** Desarrollado en React 18 con Vite y Workbox (`vite-plugin-pwa`). Gestiona almacenamiento local offline mediante IndexedDB (`idb`).
-- **Backend (PC Central):** Construido sobre FastAPI (Python 3.12) y ejecutado con Uvicorn bajo HTTPS con certificados SSL locales.
+El sistema está diseñado bajo una arquitectura **Offline-First** desacoplada, 100% portable y sin dependencias previas en la PC de planta:
+- **Frontend (PWA Móvil y PC):** Desarrollado en React 18 con Vite y Workbox (`vite-plugin-pwa`). Gestiona almacenamiento local offline mediante IndexedDB (`idb`). Compilado en `frontend/dist/`.
+- **Backend (PC Central):** Construido sobre FastAPI (Python 3.12.9) y ejecutado con Uvicorn bajo HTTPS con certificados SSL locales.
+- **Runtime Portable:** Incluye Python 3.12.9 Embeddable + librerías preinstaladas en `backend/python_portable/`, por lo que `iniciar_servidor.bat` arranca en cualquier PC Windows 64-bit sin instalar Python ni Node.js.
 - **Base de Datos:** SQLite 3 optimizada con `PRAGMA journal_mode=WAL` (Write-Ahead Logging) y `busy_timeout=5000` para soportar ráfagas de sincronización concurrente desde múltiples celulares.
 - **Almacenamiento de Archivos:** Las fotos de defectos son validadas en sus bytes reales (evitando inyecciones o scripts con Pillow) y almacenadas en el disco de la PC central particionadas por fecha: `/backend/uploads/YYYY/MM/<timestamp>_<uuid>.jpg`.
 
@@ -20,13 +21,24 @@ El sistema está diseñado bajo una arquitectura **Offline-First** desacoplada p
 | `created_at` | TEXT | NOT NULL | Fecha y hora de creación (GMT-3 Argentina) |
 | `updated_at` | TEXT | NOT NULL | Fecha y hora de última modificación |
 
+### Tabla `categorias_mueble`
+| Campo | Tipo | Restricciones | Descripción |
+|---|---|---|---|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Identificador de la categoría |
+| `nombre` | TEXT | UNIQUE NOT NULL | Nombre de la categoría (ej: Mesas, Sillas) |
+| `es_ejemplo` | INTEGER | NOT NULL DEFAULT 0 | 1 = Muestra visual excluida de celulares y métricas |
+| `activo` | INTEGER | NOT NULL DEFAULT 1 | 1 = Activo, 0 = Inactivo |
+| `created_at` / `updated_at` | TEXT | NOT NULL | Timestamps GMT-3 |
+
 ### Tabla `modelos_mueble`
 | Campo | Tipo | Restricciones | Descripción |
 |---|---|---|---|
 | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Identificador del modelo |
+| `categoria_id` | INTEGER | FOREIGN KEY -> categorias_mueble.id (NULLABLE) | Categoría del mueble |
 | `nombre` | TEXT | UNIQUE NOT NULL | Nombre comercial del modelo |
 | `codigo` | TEXT | UNIQUE NULLABLE | Código interno o SKU |
 | `descripcion` | TEXT | NULLABLE | Descripción técnica del mueble |
+| `es_ejemplo` | INTEGER | NOT NULL DEFAULT 0 | 1 = Muestra excluida de operarios y métricas |
 | `activo` | INTEGER | NOT NULL DEFAULT 1 | 1 = Activo, 0 = Inactivo (Borrado lógico) |
 | `created_at` | TEXT | NOT NULL | Fecha y hora de creación (GMT-3) |
 | `updated_at` | TEXT | NOT NULL | Fecha y hora de modificación |
@@ -36,13 +48,18 @@ El sistema está diseñado bajo una arquitectura **Offline-First** desacoplada p
 |---|---|---|---|
 | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | ID interno del reporte |
 | `client_uuid` | TEXT | UNIQUE NOT NULL (INDEX) | UUID generado en el celular (Idempotencia) |
-| `modelo_id` | INTEGER | FOREIGN KEY -> modelos_mueble.id | Modelo afectado |
+| `modelo_id` | INTEGER | FOREIGN KEY -> modelos_mueble.id (NULLABLE) | Modelo oficial (NULL si es prototipo manual) |
+| `modelo_manual` | TEXT | NULLABLE | Nombre ingresado cuando elige "Otro / Prototipo" |
 | `sector_id` | INTEGER | FOREIGN KEY -> sectores.id | Sector donde se detectó la falla |
 | `descripcion_defecto` | TEXT | NOT NULL | Detalle de la no conformidad |
 | `cantidad_afectada` | TEXT | NOT NULL | Cantidad libre (ej: "2 tableros", "1 lote") |
 | `foto_path` | TEXT | NOT NULL | Ruta relativa web a la imagen guardada |
 | `fecha_captura_local`| TEXT | NOT NULL | Timestamp en que el operario sacó la foto |
 | `fecha_sincronizacion`| TEXT| NOT NULL | Timestamp en que impactó en la PC central |
+| `es_ejemplo` | INTEGER | NOT NULL DEFAULT 0 | 1 = Reporte de ejemplo excluido de Dashboard y Excel |
+
+### Tabla `configuracion_seguridad`
+Almacena `admin_pin_hash` (`PBKDF2-HMAC-SHA256` con salt) que protege `POST/PUT/DELETE` sobre `/api/v1/admin/categorias` y `/api/v1/admin/modelos` mediante el header `X-Admin-Pin`, además de la bandera de inicialización `sample_seeded_v2`.
 
 ---
 
@@ -110,12 +127,17 @@ Recomendación de script de backup diario: copiar `backend/data/calidad.db` y la
 
 ---
 
-## 6. Comandos Operativos
+## 7. Comandos Operativos
 
 ### Iniciar Servidor Completo (PC Central)
-Hacer doble clic en `iniciar_servidor.bat` o ejecutar:
+Hacer doble clic en `iniciar_servidor.bat` o ejecutar con el runtime portable:
 ```bash
-backend\.venv\Scripts\python.exe backend\run_server.py
+backend\python_portable\python.exe backend\run_server.py
+```
+
+### Ejecutar Tests Aislados del Backend
+```bash
+backend\python_portable\python.exe backend\tests\test_backend.py
 ```
 
 ### Recompilar Frontend tras modificaciones

@@ -3,8 +3,8 @@ from pathlib import Path
 
 # Directorios base
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-DATA_DIR = BASE_DIR / "data"
-UPLOADS_DIR = BASE_DIR / "uploads"
+DATA_DIR = Path(os.getenv("CALIDAD_DATA_DIR", str(BASE_DIR / "data")))
+UPLOADS_DIR = Path(os.getenv("CALIDAD_UPLOADS_DIR", str(BASE_DIR / "uploads")))
 CERTS_DIR = BASE_DIR / "certs"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)

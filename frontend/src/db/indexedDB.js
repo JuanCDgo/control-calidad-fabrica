@@ -14,7 +14,7 @@ export async function getDB() {
         store.createIndex('fecha_captura', 'fecha_captura_local');
       }
 
-      // 2. Almacén de catálogos (Sectores y Modelos) cacheados para uso offline
+      // 2. Almacén de catálogos (Sectores, Categorías y Modelos) cacheados para uso offline
       if (!db.objectStoreNames.contains('catalogos_cache')) {
         db.createObjectStore('catalogos_cache', { keyPath: 'clave' });
       }
@@ -46,11 +46,12 @@ export async function contarReportesPendientes() {
 
 // --- CATÁLOGOS CACHEADOS ---
 
-export async function guardarCatalogosCache(sectores, modelos, timestamp) {
+export async function guardarCatalogosCache(sectores, modelos, timestamp, categorias = []) {
   const db = await getDB();
   const tx = db.transaction('catalogos_cache', 'readwrite');
   await Promise.all([
     tx.store.put({ clave: 'sectores', data: sectores, timestamp }),
+    tx.store.put({ clave: 'categorias', data: categorias, timestamp }),
     tx.store.put({ clave: 'modelos', data: modelos, timestamp }),
     tx.done
   ]);
@@ -58,13 +59,15 @@ export async function guardarCatalogosCache(sectores, modelos, timestamp) {
 
 export async function obtenerCatalogosCache() {
   const db = await getDB();
-  const [sectoresItem, modelosItem] = await Promise.all([
+  const [sectoresItem, categoriasItem, modelosItem] = await Promise.all([
     db.get('catalogos_cache', 'sectores'),
+    db.get('catalogos_cache', 'categorias'),
     db.get('catalogos_cache', 'modelos')
   ]);
 
   return {
     sectores: sectoresItem ? sectoresItem.data : [],
+    categorias: categoriasItem ? categoriasItem.data : [],
     modelos: modelosItem ? modelosItem.data : [],
     timestamp: sectoresItem ? sectoresItem.timestamp : null
   };

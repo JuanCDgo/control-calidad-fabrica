@@ -1,44 +1,78 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { CameraCapture } from '../components/CameraCapture';
-import { guardarReportePendiente, obtenerCatalogosCache, obtenerReportesPendientes } from '../db/indexedDB';
+import {
+  guardarReportePendiente,
+  guardarCatalogosCache,
+  obtenerCatalogosCache,
+  obtenerReportesPendientes
+} from '../db/indexedDB';
 import { fetchCatalogosOffline } from '../services/api';
 import { getArgentinaNowString } from '../utils/argentinaTime';
-import { CheckCircle2, Clock, AlertCircle, Layers, MapPin, FileText, Hash, Send } from 'lucide-react';
+import {
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Layers,
+  MapPin,
+  FileText,
+  Hash,
+  Send,
+  Search,
+  Tag,
+  Wrench,
+  X
+} from 'lucide-react';
 
 export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
+  const [categorias, setCategorias] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [sectores, setSectores] = useState([]);
   const [isLoadingCatalogos, setIsLoadingCatalogos] = useState(true);
 
-  // Estados del Formulario
+  // Selección de Categoría / Modelo / Prototipo
+  const [selectedCategoriaId, setSelectedCategoriaId] = useState('');
+  const [searchModelo, setSearchModelo] = useState('');
   const [modeloId, setModeloId] = useState('');
+  const [isPrototipo, setIsPrototipo] = useState(false);
+  const [prototipoNombre, setPrototipoNombre] = useState('');
+
+  // Otros campos del formulario
   const [sectorId, setSectorId] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [cantidad, setCantidad] = useState('');
   const [photoData, setPhotoData] = useState(null); // { blob, previewUrl }
 
   // Estados de Interfaz
-  const [feedback, setFeedback] = useState(null); // { tipo: 'success'|'error', mensaje }
+  const [feedback, setFeedback] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingList, setPendingList] = useState([]);
 
-  // Carga inicial de catálogos (desde IndexedDB primero, y de API si hay red)
   const loadCatalogos = async () => {
     setIsLoadingCatalogos(true);
     try {
-      // 1. Cargar lo que tengamos en IndexedDB inmediatamente (sin esperar red)
       const cached = await obtenerCatalogosCache();
-      if (cached.modelos.length > 0 || cached.sectores.length > 0) {
-        setModelos(cached.modelos);
-        setSectores(cached.sectores);
+      if (
+        cached.modelos.length > 0 ||
+        cached.sectores.length > 0 ||
+        cached.categorias.length > 0
+      ) {
+        setCategorias(cached.categorias || []);
+        setModelos(cached.modelos || []);
+        setSectores(cached.sectores || []);
       }
 
-      // 2. Si la PC central está accesible, refrescar catálogos frescos
       if (backendReachable) {
         const fresh = await fetchCatalogosOffline();
         if (fresh && fresh.modelos && fresh.sectores) {
-          setModelos(fresh.modelos);
-          setSectores(fresh.sectores);
+          setCategorias(fresh.categorias || []);
+          setModelos(fresh.modelos || []);
+          setSectores(fresh.sectores || []);
+          await guardarCatalogosCache(
+            fresh.sectores,
+            fresh.modelos,
+            fresh.servidor_timestamp_gmt3,
+            fresh.categorias || []
+          );
         }
       }
     } catch (err) {
@@ -62,6 +96,41 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
     loadPendingList();
   }, [backendReachable]);
 
+  const filteredModelos = useMemo(() => {
+    const query = searchModelo.trim().toLowerCase();
+    return modelos.filter((m) => {
+      if (selectedCategoriaId && String(m.categoria_id || '') !== String(selectedCategoriaId)) {
+        return false;
+      }
+      if (!query) return true;
+      const matchNombre = (m.nombre || '').toLowerCase().includes(query);
+      const matchCodigo = (m.codigo || '').toLowerCase().includes(query);
+      const matchCat = (m.categoria_nombre || '').toLowerCase().includes(query);
+      return matchNombre || matchCodigo || matchCat;
+    });
+  }, [modelos, selectedCategoriaId, searchModelo]);
+
+  const selectedModeloObj = useMemo(
+    () => modelos.find((m) => String(m.id) === String(modeloId)) || null,
+    [modelos, modeloId]
+  );
+
+  const handleSelectCategoria = (catId) => {
+    setIsPrototipo(false);
+    setPrototipoNombre('');
+    setSelectedCategoriaId(catId);
+    if (catId && selectedModeloObj && String(selectedModeloObj.categoria_id || '') !== String(catId)) {
+      setModeloId('');
+    }
+  };
+
+  const handleActivatePrototipo = () => {
+    setIsPrototipo(true);
+    setSelectedCategoriaId('');
+    setModeloId('');
+    setSearchModelo('');
+  };
+
   const handlePhotoCaptured = (blob, previewUrl) => {
     setPhotoData({ blob, previewUrl });
   };
@@ -74,25 +143,32 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
     e.preventDefault();
     setFeedback(null);
 
-    // Validaciones
     if (!photoData || !photoData.blob) {
       setFeedback({ tipo: 'error', mensaje: 'Debes sacar una foto del defecto para continuar.' });
       return;
     }
-    if (!modeloId) {
-      setFeedback({ tipo: 'error', mensaje: 'Selecciona el modelo del mueble.' });
+    if (isPrototipo) {
+      if (!prototipoNombre.trim()) {
+        setFeedback({ tipo: 'error', mensaje: 'Escribí el nombre o referencia del prototipo.' });
+        return;
+      }
+    } else if (!modeloId) {
+      setFeedback({
+        tipo: 'error',
+        mensaje: 'Elegí un modelo de la lista o tocá "Otro / Prototipo".'
+      });
       return;
     }
     if (!sectorId) {
       setFeedback({ tipo: 'error', mensaje: 'Selecciona el sector de la fábrica.' });
       return;
     }
-    if (!descripcion.trim()) {
-      setFeedback({ tipo: 'error', mensaje: 'Escribe una breve descripción del defecto.' });
-      return;
-    }
     if (!cantidad.trim()) {
       setFeedback({ tipo: 'error', mensaje: 'Indica la cantidad de material afectado.' });
+      return;
+    }
+    if (!descripcion.trim()) {
+      setFeedback({ tipo: 'error', mensaje: 'Escribe una breve descripción del defecto.' });
       return;
     }
 
@@ -101,15 +177,19 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
     try {
       const client_uuid = crypto.randomUUID();
       const fechaLocalGMT3 = getArgentinaNowString();
-
-      const selectedModelo = modelos.find((m) => String(m.id) === String(modeloId));
       const selectedSector = sectores.find((s) => String(s.id) === String(sectorId));
 
       const nuevoReporte = {
         client_uuid,
-        modelo_id: Number(modeloId),
+        modelo_id: isPrototipo ? null : Number(modeloId),
+        modelo_manual: isPrototipo ? prototipoNombre.trim() : null,
+        modelo_nombre: isPrototipo
+          ? `Prototipo: ${prototipoNombre.trim()}`
+          : selectedModeloObj?.nombre || 'Modelo',
+        categoria_nombre: isPrototipo
+          ? 'Otro / Prototipo'
+          : selectedModeloObj?.categoria_nombre || 'Sin categoría',
         sector_id: Number(sectorId),
-        modelo_nombre: selectedModelo ? selectedModelo.nombre : 'Modelo',
         sector_nombre: selectedSector ? selectedSector.nombre : 'Sector',
         descripcion_defecto: descripcion.trim(),
         cantidad_afectada: cantidad.trim(),
@@ -118,11 +198,14 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
         foto_preview: photoData.previewUrl
       };
 
-      // Guardado seguro e inmediato en IndexedDB
       await guardarReportePendiente(nuevoReporte);
 
       // Limpiar formulario
+      setSelectedCategoriaId('');
+      setSearchModelo('');
       setModeloId('');
+      setIsPrototipo(false);
+      setPrototipoNombre('');
       setSectorId('');
       setDescripcion('');
       setCantidad('');
@@ -135,7 +218,6 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
           : 'Reporte guardado localmente en el celular (Se enviará al recuperar WiFi).'
       });
 
-      // Refrescar contador y disparar sincronización si hay red
       await onReportSaved();
       await loadPendingList();
     } catch (err) {
@@ -172,24 +254,153 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
             />
           </div>
 
-          {/* Selector de Modelo */}
+          {/* Selección por Categoría + Lista cerrada de Modelos + Opción Prototipo */}
           <div className="form-group">
             <label className="field-label">
-              <Layers size={16} /> Modelo del Mueble
+              <Layers size={16} /> Modelo del Mueble (por Categoría)
             </label>
-            <select
-              value={modeloId}
-              onChange={(e) => setModeloId(e.target.value)}
-              className="select-input"
-              disabled={isLoadingCatalogos}
-            >
-              <option value="">-- Seleccionar Modelo --</option>
-              {modelos.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.nombre} {m.codigo ? `(${m.codigo})` : ''}
-                </option>
-              ))}
-            </select>
+
+            {/* Chips de Categorías */}
+            <div className="cat-chips-row">
+              <button
+                type="button"
+                onClick={() => handleSelectCategoria('')}
+                className={`cat-chip ${!isPrototipo && selectedCategoriaId === '' ? 'active' : ''}`}
+              >
+                <Tag size={13} />
+                <span>Todas ({modelos.length})</span>
+              </button>
+
+              {categorias.map((cat) => {
+                const count = modelos.filter((m) => m.categoria_id === cat.id).length;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => handleSelectCategoria(String(cat.id))}
+                    className={`cat-chip ${!isPrototipo && String(selectedCategoriaId) === String(cat.id) ? 'active' : ''}`}
+                  >
+                    <span>
+                      {cat.nombre} ({count})
+                    </span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={handleActivatePrototipo}
+                className={`cat-chip prototype-chip ${isPrototipo ? 'active' : ''}`}
+              >
+                <Wrench size={13} />
+                <span>Otro / Prototipo</span>
+              </button>
+            </div>
+
+            {isPrototipo ? (
+              <div className="prototipo-box">
+                <div className="prototipo-box-header">
+                  <span>Modo Prototipo / Mueble sin nombre en catálogo</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsPrototipo(false)}
+                    className="btn-link-muted"
+                  >
+                    Volver a lista
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={prototipoNombre}
+                  onChange={(e) => setPrototipoNombre(e.target.value)}
+                  placeholder="Escribí el nombre o referencia del prototipo..."
+                  className="input-text"
+                />
+              </div>
+            ) : (
+              <div className="modelo-picker-box">
+                <div className="modelo-search-wrapper">
+                  <Search size={16} className="search-icon-inline" />
+                  <input
+                    type="text"
+                    value={searchModelo}
+                    onChange={(e) => setSearchModelo(e.target.value)}
+                    placeholder="Buscar modelo por nombre o código..."
+                    className="input-search-modelo"
+                    disabled={isLoadingCatalogos}
+                  />
+                  {searchModelo && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchModelo('')}
+                      className="btn-clear-search"
+                      title="Limpiar búsqueda"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {selectedModeloObj && (
+                  <div className="selected-modelo-banner">
+                    <div>
+                      <strong>Seleccionado:</strong> {selectedModeloObj.nombre}
+                      {selectedModeloObj.codigo ? ` (${selectedModeloObj.codigo})` : ''}
+                      <span className="selected-cat-pill">
+                        {selectedModeloObj.categoria_nombre || 'Sin categoría'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModeloId('')}
+                      className="btn-link-muted"
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                )}
+
+                {filteredModelos.length > 0 ? (
+                  <div className="modelo-list-scroll">
+                    {filteredModelos.map((m) => {
+                      const isSel = String(modeloId) === String(m.id);
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setModeloId(String(m.id))}
+                          className={`modelo-option-btn ${isSel ? 'selected' : ''}`}
+                        >
+                          <div className="modelo-option-main">
+                            <span className="modelo-option-name">{m.nombre}</span>
+                            {m.codigo && <span className="modelo-code-badge">{m.codigo}</span>}
+                          </div>
+                          <span className="modelo-option-cat">
+                            {m.categoria_nombre || 'Sin categoría'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="modelo-empty-hint">
+                    <p>
+                      {modelos.length === 0
+                        ? 'Todavía no hay modelos cargados desde Admin PC.'
+                        : 'No hay modelos que coincidan con esa búsqueda.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleActivatePrototipo}
+                      className="btn-secondary-sm"
+                    >
+                      <Wrench size={14} />
+                      <span>Cargar como Otro / Prototipo</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Selector de Sector */}
@@ -212,7 +423,7 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
             </select>
           </div>
 
-          {/* Cantidad Afectada (Texto libre y ágil) */}
+          {/* Cantidad Afectada */}
           <div className="form-group">
             <label className="field-label">
               <Hash size={16} /> Cantidad Afectada
@@ -240,7 +451,6 @@ export function OperarioView({ backendReachable, onReportSaved, isSyncing }) {
             />
           </div>
 
-          {/* Botón Principal de Envío */}
           <button
             type="submit"
             disabled={isSaving}

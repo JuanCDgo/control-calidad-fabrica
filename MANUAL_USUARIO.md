@@ -7,15 +7,17 @@ Este manual explica cómo utilizar la aplicación tanto desde los teléfonos mó
 ## 1. Acceso a la Aplicación
 
 ### Desde la Computadora Central
-1. Abrí el archivo `iniciar_servidor.bat` en el escritorio o carpeta del proyecto.
-2. Abrí el navegador (Google Chrome o Edge) e ingresá a:
-   `https://localhost:8000`
+1. Hacé doble clic en `iniciar_servidor.bat` dentro de la carpeta del proyecto (si querés tenerlo en el Escritorio, creá un **acceso directo**, no muevas el archivo `.bat` suelto).
+2. La primera vez en una PC nueva:
+   * Si Windows pide confirmar la instalación del certificado SSL local, tocá **"Sí"** para que Chrome/Edge muestren la app como sitio seguro.
+   * Si salta el **Firewall de Windows**, marcá redes privadas y tocá **"Permitir acceso"** para que los celulares puedan conectarse por WiFi.
+3. El navegador se abrirá automáticamente en `https://localhost:8000` (no necesitás tener Python ni otros programas instalados).
 
 ### Desde los Celulares en la Fábrica (Escaneo QR en 1 toque)
 1. Conectá el teléfono a la red WiFi de la fábrica.
 2. En la pantalla de la computadora central (Panel Admin), hacé clic en el botón azul **"QR para Celulares"**.
-3. Abrí la cámara del celular y apuntá al código QR gigante en la pantalla.
-4. Tocá la notificación para abrir la página en Chrome.
+3. Si Chrome muestra advertencia de seguridad en el teléfono, pasá a la pestaña **"Certificado SSL"** dentro del modal QR, bajá `FabricaCalidadRootCA.crt` e instalalo como Certificado de CA en Ajustes del celular.
+4. Volvé a **"App Operarios"**, escaneá el código QR gigante con la cámara y abrí la página en Chrome.
 5. Tocá **"Instalar aplicación"** o **"Agregar a pantalla principal"**. ¡Listo! La app queda instalada con ícono propio y lista para trabajar offline.
 
 ---
@@ -26,10 +28,11 @@ Este manual explica cómo utilizar la aplicación tanto desde los teléfonos mó
 1. Tocá el botón grande azul **"Capturar Foto del Defecto"**. Se abrirá la cámara de tu celular.
 2. Apuntá y sacá una foto clara donde se aprecie la no conformidad (madera rajada, laca corrida, esquina golpeada).
 3. La aplicación optimizará la foto automáticamente en segundos para que no pese de más.
-4. Seleccioná el **Modelo del Mueble** y el **Sector de Planta** donde estás trabajando.
-5. En **Cantidad Afectada**, escribí de forma ágil el material dañado (ejemplo: *"2 tableros"*, *"1 frente de cajón"*, *"4 patas"*).
-6. En **Descripción del Defecto**, escribí una explicación breve pero clara del problema.
-7. Tocá **"Guardar Reporte"**.
+4. Filtrá por **Categoría** y buscá en la lista el **Modelo del Mueble** por nombre o código. Si es un mueble nuevo o prototipo que todavía no está en la lista, tocá **"Otro / Prototipo"** y escribí su referencia.
+5. Seleccioná el **Sector de Planta** donde estás trabajando.
+6. En **Cantidad Afectada**, escribí de forma ágil el material dañado (ejemplo: *"2 tableros"*, *"1 frente de cajón"*, *"4 patas"*).
+7. En **Descripción del Defecto**, escribí una explicación breve pero clara del problema.
+8. Tocá **"Guardar Reporte"**.
 
 ### ¿Qué pasa si se corta el WiFi en el galpón?
 * **No te preocupes:** la aplicación está pensada para esto. El reporte y la foto se guardan de forma 100% segura dentro de la memoria de tu celular.
@@ -69,11 +72,13 @@ Diseñado especialmente para reuniones de producción, sala de capacitación y a
   4. Al tocar Enter o volver a pulsar "Listo", los cambios se guardan de forma permanente en tu navegador para futuras reuniones.
   5. Contás también con un botón de reinicio para volver a los textos estándar si lo deseás.
 
-### Pestaña 2: Gestión de Modelos de Muebles
-* **Agregar nuevo:** Tocá `+ Nuevo Modelo`, completá el nombre, código SKU y descripción, y tocá Guardar.
-* **Editar:** Hacé clic en el ícono de lápiz para corregir nombres o descripciones.
-* **Desactivar / Activar:** Tocá el botón de encendido para poner un modelo en estado "Inactivo". Los modelos inactivos **desaparecen automáticamente del celular de los operarios** para que no elijan modelos viejos o discontinuados, pero **no se borran del historial** de reportes anteriores.
+### Pestaña 2: Categorías y Muebles (Protegida con PIN)
+Para evitar que alguien cambie o escriba mal el nombre de los muebles oficiales, la creación, edición y borrado de **Categorías y Modelos** está protegida con un **PIN de seguridad**:
+* **Primera vez:** Tocá **"Configurar PIN"** y elegí una clave numérica (4 a 12 caracteres).
+* **Desbloquear / Bloquear:** Mientras esté bloqueado 🔒, la lista es de solo lectura. Tocá **"Desbloquear con PIN"** para cargar categorías (ej. *Mesas*, *Sillas*, *Placares*) y agregar modelos adentro con su nombre, código y descripción.
+* **Muestra de ejemplo:** El sistema incluye 1 categoría/modelo de muestra y 1 reporte de ejemplo para referencia visual. Están marcados como **"Ejemplo"** y **nunca** suman en gráficos ni se exportan a Excel.
+* **Desactivar / Activar:** Los modelos inactivos **desaparecen automáticamente del celular de los operarios** para que no elijan modelos discontinuados, pero **no se borran del historial** de reportes anteriores.
 
-### Pestaña 3: Gestión de Sectores de Planta
+### Pestaña 3: Sectores de Planta
 * La aplicación ya viene cargada con los sectores de fábrica: *Maquinado, Armado, Cabinas de Fondo, Cabinas de Terminación, Embalaje, Living y Colchones, Red*.
-* Podés agregar nuevos sectores si la fábrica se expande, corregir nombres o desactivar sectores temporales.
+* Podés agregar nuevos sectores si la fábrica se expande, corregir nombres o desactivar sectores temporales (sin necesidad de PIN).

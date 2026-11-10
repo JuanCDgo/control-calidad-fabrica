@@ -1,4 +1,7 @@
+import hashlib
+import hmac
 import io
+import os
 import uuid
 from pathlib import Path
 from fastapi import HTTPException, UploadFile, status
@@ -8,6 +11,46 @@ from app.core.timezone import get_arg_now
 # Extensiones y tipos MIME permitidos para las fotos de defectos
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp"}
+PIN_MIN_LEN = 4
+PIN_MAX_LEN = 12
+
+
+def normalize_pin(pin: str) -> str:
+    """Valida formato básico del PIN de seguridad (sin espacios extremos, 4 a 12 caracteres)."""
+    clean = (pin or "").strip()
+    if len(clean) < PIN_MIN_LEN or len(clean) > PIN_MAX_LEN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El PIN debe tener entre {PIN_MIN_LEN} y {PIN_MAX_LEN} caracteres."
+        )
+    if any(ch.isspace() for ch in clean):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El PIN no puede contener espacios."
+        )
+    return clean
+
+
+def hash_pin(pin: str) -> str:
+    """Genera un hash PBKDF2-HMAC-SHA256 con salt aleatorio para almacenar el PIN."""
+    clean = normalize_pin(pin)
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", clean.encode("utf-8"), salt, 100_000)
+    return f"{salt.hex()}${digest.hex()}"
+
+
+def verify_pin_hash(pin: str, stored_hash: str) -> bool:
+    """Compara un PIN ingresado contra su hash almacenado en tiempo constante."""
+    if not pin or not stored_hash or "$" not in stored_hash:
+        return False
+    try:
+        salt_hex, digest_hex = stored_hash.split("$", 1)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(digest_hex)
+    except ValueError:
+        return False
+    candidate = hashlib.pbkdf2_hmac("sha256", pin.strip().encode("utf-8"), salt, 100_000)
+    return hmac.compare_digest(candidate, expected)
 
 def validate_and_sanitize_image(file: UploadFile, content: bytes) -> str:
     """

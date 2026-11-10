@@ -2,6 +2,7 @@
 .venv/
 venv/
 ENV/
+backend/python_portable/
 
 # Python
 __pycache__/
