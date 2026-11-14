@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { QRCodeSVG } from 'qrcode.react';
 import {
   fetchReportesAdmin,
   updateReporteAdmin,
@@ -36,6 +35,7 @@ import {
 } from '../services/api';
 import { exportarReportesAExcel } from '../utils/exportExcel';
 import { DashboardView } from '../components/DashboardView';
+import { QrConnectModal } from '../components/QrConnectModal';
 import {
   ClipboardList,
   Layers,
@@ -50,13 +50,9 @@ import {
   Search,
   ZoomIn,
   QrCode,
-  Copy,
-  CheckCheck,
-  Smartphone,
   BarChart3,
   FileSpreadsheet,
   ShieldCheck,
-  Download,
   Lock,
   Unlock,
   KeyRound,
@@ -116,9 +112,7 @@ export function AdminView({ backendReachable }) {
   const [modalEncargado, setModalEncargado] = useState({ isOpen: false, item: null });
   const [modalTipoProblema, setModalTipoProblema] = useState({ isOpen: false, item: null });
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [qrMode, setQrMode] = useState('app');
   const [serverInfo, setServerInfo] = useState(null);
-  const [copied, setCopied] = useState(false);
 
   const loadAll = async () => {
     if (!backendReachable) return;
@@ -1337,105 +1331,12 @@ export function AdminView({ backendReachable }) {
       )}
 
       {/* MODAL QR PARA CELULARES */}
-      {isQrModalOpen && (() => {
-        const baseServerUrl = serverInfo?.server_url || window.location.origin;
-        const certDownloadUrl = `${baseServerUrl}/api/ca-cert`;
-        const activeQrValue = qrMode === 'cert' ? certDownloadUrl : baseServerUrl;
-        return (
-          <div className="modal-backdrop" onClick={() => setIsQrModalOpen(false)}>
-            <div className="modal-card qr-modal-card" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <div className="modal-title-box">
-                  {qrMode === 'cert' ? <ShieldCheck size={20} /> : <QrCode size={20} />}
-                  <h3>{qrMode === 'cert' ? 'Certificado SSL para Celulares' : 'Código QR para Celulares'}</h3>
-                </div>
-                <button onClick={() => setIsQrModalOpen(false)} className="btn-close-modal">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="qr-modal-body">
-                <div className="qr-mode-switcher">
-                  <button
-                    type="button"
-                    onClick={() => setQrMode('app')}
-                    className={`qr-mode-btn ${qrMode === 'app' ? 'active' : ''}`}
-                  >
-                    <Smartphone size={15} />
-                    <span>App Celulares</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setQrMode('cert')}
-                    className={`qr-mode-btn ${qrMode === 'cert' ? 'active' : ''}`}
-                  >
-                    <ShieldCheck size={15} />
-                    <span>Certificado SSL</span>
-                  </button>
-                </div>
-
-                <div className="qr-code-wrapper">
-                  <QRCodeSVG
-                    value={activeQrValue}
-                    size={220}
-                    level="M"
-                    includeMargin={true}
-                    bgColor="#ffffff"
-                    fgColor="#0f172a"
-                  />
-                </div>
-
-                <div className="qr-url-box">
-                  <span className="qr-url-text">{activeQrValue}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(activeQrValue);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className="btn-copy-url"
-                  >
-                    {copied ? <CheckCheck size={16} /> : <Copy size={16} />}
-                    <span>{copied ? 'Copiado' : 'Copiar'}</span>
-                  </button>
-                </div>
-
-                {qrMode === 'app' ? (
-                  <div className="qr-steps-list">
-                    <div className="qr-step-item">
-                      <span className="step-num">1</span>
-                      <span>Conectá el celular al Wi-Fi de la fábrica.</span>
-                    </div>
-                    <div className="qr-step-item">
-                      <span className="step-num">2</span>
-                      <span>Escaneá este QR con la cámara. Si aparece aviso de privacidad, instalá primero el <strong>Certificado SSL</strong>.</span>
-                    </div>
-                    <div className="qr-step-item">
-                      <span className="step-num">3</span>
-                      <span>En Chrome tocá <strong>"Instalar aplicación"</strong> para sacar o subir fotos rápido.</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="qr-steps-list">
-                    <div className="qr-step-item">
-                      <span className="step-num">1</span>
-                      <span>Escaneá este QR para bajar <code>FabricaCalidadRootCA.crt</code>.</span>
-                    </div>
-                    <div className="qr-step-item">
-                      <span className="step-num">2</span>
-                      <span>En Android: <strong>Ajustes → Seguridad → Instalar certificado → Certificado de CA</strong>.</span>
-                    </div>
-                    <a href={certDownloadUrl} className="btn-cert-download">
-                      <Download size={16} />
-                      <span>Descargar Certificado (.crt)</span>
-                    </a>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* MODAL QR PARA CONECTAR CELULARES */}
+      <QrConnectModal
+        isOpen={isQrModalOpen}
+        onClose={() => setIsQrModalOpen(false)}
+        serverInfo={serverInfo}
+      />
     </div>
   );
 }

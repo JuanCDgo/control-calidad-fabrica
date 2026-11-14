@@ -1,5 +1,6 @@
 @echo off
-title Servidor Central - Control de Calidad
+chcp 65001 > nul
+title Servidor Central - Control de Planta Patria v1.2
 color 0B
 echo =========================================================
 echo   INICIANDO CONTROL DE CALIDAD - FABRICA DE MUEBLES

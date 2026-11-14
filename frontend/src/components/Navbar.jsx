@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Wifi, WifiOff, RefreshCw, Settings, ShieldCheck, Smartphone, Monitor } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Settings, ShieldCheck, Smartphone, Monitor, QrCode } from 'lucide-react';
 import { SettingsModal } from './SettingsModal';
+import { QrConnectModal } from './QrConnectModal';
 
 export function Navbar({
   currentView,
@@ -13,6 +14,7 @@ export function Navbar({
   onRefreshStatus
 }) {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isQrOpen, setIsQrOpen] = useState(false);
 
   return (
     <>
@@ -73,6 +75,16 @@ export function Navbar({
           </button>
 
           <button
+            type="button"
+            onClick={() => setIsQrOpen(true)}
+            className="btn-qr-navbar"
+            title="Mostrar código QR para conectar celular por Wi-Fi"
+          >
+            <QrCode size={17} />
+            <span className="btn-sync-label">QR Celular</span>
+          </button>
+
+          <button
             onClick={() => setIsSettingsOpen(true)}
             className="btn-settings-icon"
             title="Configurar IP de PC central"
@@ -81,6 +93,11 @@ export function Navbar({
           </button>
         </div>
       </header>
+
+      <QrConnectModal
+        isOpen={isQrOpen}
+        onClose={() => setIsQrOpen(false)}
+      />
 
       <SettingsModal
         isOpen={isSettingsOpen}
