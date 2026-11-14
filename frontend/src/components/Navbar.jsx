@@ -22,8 +22,8 @@ export function Navbar({
             <ShieldCheck size={22} />
           </div>
           <div className="brand-titles">
-            <h1 className="brand-name">Control de Calidad</h1>
-            <span className="brand-subtitle">Línea de Producción</span>
+            <h1 className="brand-name">Control de Planta Patria v1.2</h1>
+            <span className="brand-subtitle">Auditoría, Fotos y Planillas</span>
           </div>
         </div>
 

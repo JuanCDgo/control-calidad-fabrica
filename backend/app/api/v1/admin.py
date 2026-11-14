@@ -6,6 +6,8 @@ from app.core.security import hash_pin, verify_pin_hash
 from app.core.timezone import get_arg_now_str
 from app.models.entities import (
     Sector,
+    Encargado,
+    TipoProblema,
     CategoriaMueble,
     ModeloMueble,
     ReporteCalidad,
@@ -18,6 +20,12 @@ from app.schemas.dtos import (
     SectorCreate,
     SectorUpdate,
     SectorResponse,
+    EncargadoCreate,
+    EncargadoUpdate,
+    EncargadoResponse,
+    TipoProblemaCreate,
+    TipoProblemaUpdate,
+    TipoProblemaResponse,
     CategoriaMuebleCreate,
     CategoriaMuebleUpdate,
     CategoriaMuebleResponse,
@@ -499,3 +507,136 @@ def eliminar_o_desactivar_modelo(modelo_id: int, db: Session = Depends(get_db)):
     db.delete(modelo)
     db.commit()
     return {"mensaje": "Modelo eliminado definitivamente (sin historial)", "id": modelo_id}
+
+
+# ==========================================
+# CRUD ENCARGADOS (LIBRE SIN PIN)
+# ==========================================
+
+@router.get("/encargados", response_model=List[EncargadoResponse])
+def listar_encargados(solo_activos: bool = Query(False), db: Session = Depends(get_db)):
+    query = db.query(Encargado)
+    if solo_activos:
+        query = query.filter(Encargado.activo == 1)
+    return query.order_by(Encargado.nombre.asc()).all()
+
+
+@router.post("/encargados", response_model=EncargadoResponse, status_code=status.HTTP_201_CREATED)
+def crear_encargado(datos: EncargadoCreate, db: Session = Depends(get_db)):
+    nombre_limpio = datos.nombre.strip()
+    existente = db.query(Encargado).filter(Encargado.nombre.ilike(nombre_limpio)).first()
+    if existente:
+        raise HTTPException(status_code=400, detail=f"Ya existe un encargado con el nombre '{nombre_limpio}'.")
+    now = get_arg_now_str()
+    nuevo = Encargado(
+        nombre=nombre_limpio,
+        sector_default=datos.sector_default.strip() if datos.sector_default else None,
+        archivo_excel=datos.archivo_excel.strip() if datos.archivo_excel else None,
+        activo=1,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+    return nuevo
+
+
+@router.put("/encargados/{encargado_id}", response_model=EncargadoResponse)
+def actualizar_encargado(encargado_id: int, datos: EncargadoUpdate, db: Session = Depends(get_db)):
+    enc = db.query(Encargado).filter(Encargado.id == encargado_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Encargado no encontrado.")
+    if datos.nombre is not None:
+        nombre_limpio = datos.nombre.strip()
+        dup = db.query(Encargado).filter(Encargado.nombre.ilike(nombre_limpio), Encargado.id != encargado_id).first()
+        if dup:
+            raise HTTPException(status_code=400, detail=f"Ya existe otro encargado con el nombre '{nombre_limpio}'.")
+        enc.nombre = nombre_limpio
+    if "sector_default" in datos.model_fields_set:
+        enc.sector_default = datos.sector_default.strip() if datos.sector_default else None
+    if "archivo_excel" in datos.model_fields_set:
+        enc.archivo_excel = datos.archivo_excel.strip() if datos.archivo_excel else None
+    if datos.activo is not None:
+        enc.activo = datos.activo
+    enc.updated_at = get_arg_now_str()
+    db.commit()
+    db.refresh(enc)
+    return enc
+
+
+@router.delete("/encargados/{encargado_id}")
+def eliminar_o_desactivar_encargado(encargado_id: int, db: Session = Depends(get_db)):
+    enc = db.query(Encargado).filter(Encargado.id == encargado_id).first()
+    if not enc:
+        raise HTTPException(status_code=404, detail="Encargado no encontrado.")
+    tiene_reportes = db.query(ReporteCalidad).filter(ReporteCalidad.encargado_id == encargado_id).first() is not None
+    if tiene_reportes:
+        enc.activo = 0
+        enc.updated_at = get_arg_now_str()
+        db.commit()
+        return {"mensaje": "Encargado desactivado (mantiene historial de reportes).", "id": encargado_id, "activo": 0}
+    db.delete(enc)
+    db.commit()
+    return {"mensaje": "Encargado eliminado definitivamente.", "id": encargado_id}
+
+
+# ==========================================
+# CRUD TIPOS DE PROBLEMA (LIBRE SIN PIN)
+# ==========================================
+
+@router.get("/tipos-problema", response_model=List[TipoProblemaResponse])
+def listar_tipos_problema(solo_activos: bool = Query(False), db: Session = Depends(get_db)):
+    query = db.query(TipoProblema)
+    if solo_activos:
+        query = query.filter(TipoProblema.activo == 1)
+    return query.order_by(TipoProblema.nombre.asc()).all()
+
+
+@router.post("/tipos-problema", response_model=TipoProblemaResponse, status_code=status.HTTP_201_CREATED)
+def crear_tipo_problema(datos: TipoProblemaCreate, db: Session = Depends(get_db)):
+    nombre_limpio = datos.nombre.strip()
+    existente = db.query(TipoProblema).filter(TipoProblema.nombre.ilike(nombre_limpio)).first()
+    if existente:
+        raise HTTPException(status_code=400, detail=f"Ya existe el tipo de problema '{nombre_limpio}'.")
+    now = get_arg_now_str()
+    nuevo = TipoProblema(nombre=nombre_limpio, activo=1, created_at=now, updated_at=now)
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+    return nuevo
+
+
+@router.put("/tipos-problema/{tipo_id}", response_model=TipoProblemaResponse)
+def actualizar_tipo_problema(tipo_id: int, datos: TipoProblemaUpdate, db: Session = Depends(get_db)):
+    tp = db.query(TipoProblema).filter(TipoProblema.id == tipo_id).first()
+    if not tp:
+        raise HTTPException(status_code=404, detail="Tipo de problema no encontrado.")
+    if datos.nombre is not None:
+        nombre_limpio = datos.nombre.strip()
+        dup = db.query(TipoProblema).filter(TipoProblema.nombre.ilike(nombre_limpio), TipoProblema.id != tipo_id).first()
+        if dup:
+            raise HTTPException(status_code=400, detail=f"Ya existe otro tipo de problema '{nombre_limpio}'.")
+        tp.nombre = nombre_limpio
+    if datos.activo is not None:
+        tp.activo = datos.activo
+    tp.updated_at = get_arg_now_str()
+    db.commit()
+    db.refresh(tp)
+    return tp
+
+
+@router.delete("/tipos-problema/{tipo_id}")
+def eliminar_o_desactivar_tipo_problema(tipo_id: int, db: Session = Depends(get_db)):
+    tp = db.query(TipoProblema).filter(TipoProblema.id == tipo_id).first()
+    if not tp:
+        raise HTTPException(status_code=404, detail="Tipo de problema no encontrado.")
+    tiene_reportes = db.query(ReporteCalidad).filter(ReporteCalidad.tipo_problema_id == tipo_id).first() is not None
+    if tiene_reportes:
+        tp.activo = 0
+        tp.updated_at = get_arg_now_str()
+        db.commit()
+        return {"mensaje": "Tipo de problema desactivado (mantiene historial).", "id": tipo_id, "activo": 0}
+    db.delete(tp)
+    db.commit()
+    return {"mensaje": "Tipo de problema eliminado definitivamente.", "id": tipo_id}

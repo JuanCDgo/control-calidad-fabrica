@@ -21,28 +21,38 @@ export function exportarReportesAExcel(reportes, apiBaseUrl = '') {
 
   const headers = [
     'ID',
-    'Fecha Captura en Planta (GMT-3)',
-    'Fecha Sincronización en PC (GMT-3)',
-    'Sector de Planta',
-    'Categoría',
-    'Modelo de Mueble',
+    'Fecha Captura (GMT-3)',
+    'Encargado',
+    'Sector / Área',
+    'Tipo de Problema',
+    'Impacto',
+    'Producto / Mueble',
     'Código',
-    'Cantidad de Material Afectado',
-    'Descripción del Defecto',
-    'Ruta de Foto'
+    'Detalle Pieza o Insumo',
+    'Cant. Afectada',
+    'Descripción del Problema',
+    'Acción Inmediata Tomada',
+    'Estado',
+    'Enviado a Planilla',
+    'Link Foto'
   ];
 
   const rows = reales.map((rep) => [
     escapeCSV(rep.id),
     escapeCSV(rep.fecha_captura_local),
-    escapeCSV(rep.fecha_sincronizacion),
+    escapeCSV(rep.encargado_nombre || 'Sin asignar'),
     escapeCSV(rep.sector_nombre || 'Sin Sector'),
-    escapeCSV(rep.categoria_nombre || 'Sin Categoría'),
-    escapeCSV(rep.modelo_nombre || 'Sin Modelo'),
+    escapeCSV(rep.tipo_problema_nombre || 'OTRO / CLIMA LABORAL'),
+    escapeCSV(rep.impacto || 'DEFECTO'),
+    escapeCSV(rep.modelo_nombre || 'General'),
     escapeCSV(rep.modelo_codigo || ''),
+    escapeCSV(rep.detalle_pieza || ''),
     escapeCSV(rep.cantidad_afectada),
     escapeCSV(rep.descripcion_defecto),
-    escapeCSV(rep.foto_path ? `${apiBaseUrl}${rep.foto_path}` : '')
+    escapeCSV(rep.accion_inmediata || ''),
+    escapeCSV(rep.estado || 'Abierto'),
+    escapeCSV(rep.exportado_excel ? `Sí (${rep.exportado_archivo || ''})` : 'Pendiente'),
+    escapeCSV(rep.foto_link_corto ? `${apiBaseUrl}${rep.foto_link_corto}` : 'Sin foto')
   ]);
 
   const csvContent = [
@@ -56,7 +66,7 @@ export function exportarReportesAExcel(reportes, apiBaseUrl = '') {
   const now = new Date();
   const fechaStr = now.toISOString().slice(0, 10).replace(/-/g, '');
   const horaStr = now.toTimeString().slice(0, 5).replace(/:/g, '');
-  const filename = `reportes_calidad_${fechaStr}_${horaStr}.csv`;
+  const filename = `reportes_problemas_${fechaStr}_${horaStr}.csv`;
 
   const link = document.createElement('a');
   link.setAttribute('href', url);

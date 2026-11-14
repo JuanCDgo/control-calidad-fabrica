@@ -6,7 +6,7 @@ import {
 import { enviarReporteAPI, fetchCatalogosOffline } from './api';
 
 /**
- * Sincroniza los catálogos de sectores y modelos con el backend para tenerlos offline.
+ * Sincroniza todos los catálogos con el backend para tenerlos offline.
  */
 export async function sincronizarCatalogos() {
   try {
@@ -16,7 +16,11 @@ export async function sincronizarCatalogos() {
         data.sectores,
         data.modelos,
         data.servidor_timestamp_gmt3,
-        data.categorias || []
+        data.categorias || [],
+        data.encargados || [],
+        data.tipos_problema || [],
+        data.impactos || ['FALTA', 'SOBRA', 'DEFECTO', 'OTRO'],
+        data.estados || ['Abierto', 'En Proceso', 'Resuelto']
       );
       return { ok: true, data };
     }
@@ -45,21 +49,17 @@ export async function sincronizarReportesPendientes(onProgreso = null) {
       }
 
       await enviarReporteAPI(reporte);
-
-      // Si el envío fue exitoso (o ya existía en backend por idempotencia), lo borramos de IndexedDB
       await eliminarReportePendiente(reporte.client_uuid);
       sincronizados++;
     } catch (err) {
       console.error(`Error al sincronizar reporte ${reporte.client_uuid}:`, err);
       fallidos++;
-      // Si la falla es por corte de red total, frenamos el bucle para no reintentar en vano
       if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
         break;
       }
     }
   }
 
-  // Refrescar también los catálogos si hay conexión
   try {
     await sincronizarCatalogos();
   } catch (_) {}

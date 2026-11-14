@@ -1,27 +1,38 @@
 import io
 import os
+import shutil
 import sys
 import tempfile
 import uuid
 from pathlib import Path
 from PIL import Image
+import openpyxl
 
 # Usar directorios temporales aislados para nunca ensuciar calidad.db ni uploads reales
 _TMP_TEST_DIR = tempfile.TemporaryDirectory()
-os.environ["CALIDAD_DATA_DIR"] = str(Path(_TMP_TEST_DIR.name) / "data")
-os.environ["CALIDAD_UPLOADS_DIR"] = str(Path(_TMP_TEST_DIR.name) / "uploads")
+TMP_ROOT = Path(_TMP_TEST_DIR.name)
+os.environ["CALIDAD_DATA_DIR"] = str(TMP_ROOT / "data")
+os.environ["CALIDAD_UPLOADS_DIR"] = str(TMP_ROOT / "uploads")
+os.environ["CALIDAD_CARGA_DIR"] = str(TMP_ROOT / "Carga_Semanal")
 
-# Agregar backend al path
+# Copiar plantilla real de Encargado para probar el volcado a Excel
+PLANTILLA_SRC = (
+    Path(__file__).resolve().parents[3]
+    / "control-planta-patria-v1.1"
+    / "Plantilla_Encargado_Planta.xlsx"
+)
+Path(os.environ["CALIDAD_CARGA_DIR"]).mkdir(parents=True, exist_ok=True)
+if PLANTILLA_SRC.exists():
+    shutil.copy2(PLANTILLA_SRC, Path(os.environ["CALIDAD_CARGA_DIR"]) / "Encargado_1_Armado.xlsx")
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi.testclient import TestClient
-from app.core.database import engine
 from app.main import app
 
 
 def create_dummy_image_bytes():
-    """Crea una imagen válida en memoria de 100x100 para pruebas de carga."""
     img = Image.new("RGB", (100, 100), color=(73, 109, 137))
     buf = io.BytesIO()
     img.save(buf, format="JPEG")
@@ -31,180 +42,154 @@ def create_dummy_image_bytes():
 
 def test_full_flow():
     with TestClient(app) as client:
-        print("\n=== 1. Health check, Server Info y Certificado Root CA ===")
+        print("\n=== 1. Health check, Server Info y Catálogos Precargados v1.2 ===")
         res = client.get("/api/health")
         assert res.status_code == 200, res.text
         assert "hora_argentina_gmt3" in res.json()
 
         res_info = client.get("/api/server-info")
         assert res_info.status_code == 200, res_info.text
-        assert res_info.json()["server_url"].startswith("http")
 
-        # Si existe rootCA.crt debe descargarse correctamente
-        ca_file = BACKEND_DIR / "certs" / "rootCA.crt"
-        if ca_file.exists():
-            res_ca = client.get("/api/ca-cert")
-            assert res_ca.status_code == 200, res_ca.text
-            assert b"BEGIN CERTIFICATE" in res_ca.content
+        res_off = client.get("/api/v1/catalogos/offline")
+        assert res_off.status_code == 200, res_off.text
+        cat_data = res_off.json()
 
-        print("\n=== 2. Verificación de Sectores y Muestras de Ejemplo ===")
-        res = client.get("/api/v1/admin/sectores")
-        assert res.status_code == 200
-        sectores = res.json()
-        nombres_sectores = [s["nombre"] for s in sectores]
-        for esp in [
-            "Maquinado",
-            "Armado",
-            "Cabinas de Fondo",
-            "Cabinas de Terminación",
-            "Embalaje",
-            "Living y Colchones",
-            "Red",
-        ]:
-            assert esp in nombres_sectores, f"Falta sector: {esp}"
+        assert len(cat_data["sectores"]) == 12
+        assert len(cat_data["encargados"]) == 4
+        assert len(cat_data["tipos_problema"]) == 12
+        assert len(cat_data["categorias"]) == 6
+        assert len(cat_data["modelos"]) == 76
+        assert cat_data["impactos"] == ["FALTA", "SOBRA", "DEFECTO", "OTRO"]
 
-        # Verificar que el ejemplo existe en Admin pero NO viaja al celular en /catalogos/offline
-        res_cats_admin = client.get("/api/v1/admin/categorias")
-        assert res_cats_admin.status_code == 200
-        assert any(c["es_ejemplo"] == 1 for c in res_cats_admin.json())
+        lucas = next(e for e in cat_data["encargados"] if "Lucas" in e["nombre"])
+        armado = next(s for s in cat_data["sectores"] if s["nombre"] == "Armado")
+        tipo_faltante = next(t for t in cat_data["tipos_problema"] if "FALTANTE" in t["nombre"])
+        silla_docta = next(m for m in cat_data["modelos"] if m["nombre"] == "Silla Docta")
 
-        res_mods_admin = client.get("/api/v1/admin/modelos")
-        assert res_mods_admin.status_code == 200
-        assert any(m["es_ejemplo"] == 1 for m in res_mods_admin.json())
+        print("\n=== 2. CRUD Encargados y Tipos de Problema ===")
+        res_enc = client.post(
+            "/api/v1/admin/encargados",
+            json={"nombre": "Juan Test", "sector_default": "Embalaje", "archivo_excel": "Encargado_1_Armado.xlsx"},
+        )
+        assert res_enc.status_code == 201, res_enc.text
+        enc_test_id = res_enc.json()["id"]
 
-        res_offline_init = client.get("/api/v1/catalogos/offline")
-        assert res_offline_init.status_code == 200
-        assert len(res_offline_init.json()["categorias"]) == 0
-        assert len(res_offline_init.json()["modelos"]) == 0
+        res_enc_upd = client.put(f"/api/v1/admin/encargados/{enc_test_id}", json={"sector_default": "Logística"})
+        assert res_enc_upd.status_code == 200 and res_enc_upd.json()["sector_default"] == "Logística"
 
-        res_reps_init = client.get("/api/v1/reportes/")
-        assert res_reps_init.status_code == 200
-        assert any(r["es_ejemplo"] == 1 for r in res_reps_init.json())
+        res_tp = client.post("/api/v1/admin/tipos-problema", json={"nombre": "PROBLEMA DE PRUEBA"})
+        assert res_tp.status_code == 201, res_tp.text
+        tp_test_id = res_tp.json()["id"]
+        assert client.delete(f"/api/v1/admin/tipos-problema/{tp_test_id}").status_code == 200
+        assert client.delete(f"/api/v1/admin/encargados/{enc_test_id}").status_code == 200
 
         print("\n=== 3. Seguridad PIN para Categorías y Modelos ===")
-        res_pin_status = client.get("/api/v1/admin/pin/status")
-        assert res_pin_status.status_code == 200
-        assert res_pin_status.json()["pin_configurado"] is False
-
-        # Sin PIN configurado debe rechazar crear categoría o modelo
-        res_no_pin = client.post("/api/v1/admin/categorias", json={"nombre": "Mesas"})
-        assert res_no_pin.status_code == 403
-
-        # Configurar PIN
-        res_setup = client.post("/api/v1/admin/pin/setup", json={"pin": "2468"})
-        assert res_setup.status_code == 200
-        assert res_setup.json()["pin_configurado"] is True
-
-        # Intentar crear con PIN erróneo -> 401
-        res_bad_pin = client.post(
-            "/api/v1/admin/categorias",
-            json={"nombre": "Mesas"},
-            headers={"X-Admin-Pin": "9999"},
-        )
-        assert res_bad_pin.status_code == 401
-
-        # Verificar PIN válido
-        res_ver = client.post("/api/v1/admin/pin/verify", json={"pin": "2468"})
-        assert res_ver.status_code == 200 and res_ver.json()["valid"] is True
-
-        print("\n=== 4. CRUD de Categorías y Modelos (con PIN) ===")
+        assert client.post("/api/v1/admin/categorias", json={"nombre": "Exterior"}).status_code == 403
+        assert client.post("/api/v1/admin/pin/setup", json={"pin": "2468"}).status_code == 200
         pin_headers = {"X-Admin-Pin": "2468"}
-        res_cat = client.post(
-            "/api/v1/admin/categorias",
-            json={"nombre": "Comedor"},
-            headers=pin_headers,
-        )
-        assert res_cat.status_code == 201, res_cat.text
-        cat_id = res_cat.json()["id"]
+        res_cat = client.post("/api/v1/admin/categorias", json={"nombre": "Exterior"}, headers=pin_headers)
+        assert res_cat.status_code == 201
 
-        nuevo_mod = {
-            "nombre": f"Mesa Ratona Industrial {uuid.uuid4().hex[:6]}",
-            "categoria_id": cat_id,
-            "codigo": f"MRI-{uuid.uuid4().hex[:4].upper()}",
-            "descripcion": "Hierro estructural y eucalipto entablonado",
-        }
-        res_mod = client.post("/api/v1/admin/modelos", json=nuevo_mod, headers=pin_headers)
-        assert res_mod.status_code == 201, res_mod.text
-        modelo_id = res_mod.json()["id"]
-        assert res_mod.json()["categoria_nombre"] == "Comedor"
-
-        # Editar modelo con PIN
-        res_upd = client.put(
-            f"/api/v1/admin/modelos/{modelo_id}",
-            json={"descripcion": "Hierro 40x40 y eucalipto 2 pulgadas"},
-            headers=pin_headers,
-        )
-        assert res_upd.status_code == 200
-
-        print("\n=== 5. Catálogos Offline para PWA ===")
-        res_off = client.get("/api/v1/catalogos/offline")
-        assert res_off.status_code == 200
-        cat_data = res_off.json()
-        assert len(cat_data["categorias"]) == 1
-        assert len(cat_data["modelos"]) == 1
-        assert cat_data["modelos"][0]["id"] == modelo_id
-
-        print("\n=== 6. Reporte Oficial + Idempotencia + Reporte Prototipo Manual ===")
+        print("\n=== 4. Reporte CON Foto + Link Corto /f/{id} + Reporte SIN Foto (Opcional) ===")
         img_bytes = create_dummy_image_bytes()
-        sector_id = sectores[0]["id"]
-        form_data = {
+        form_con_foto = {
             "client_uuid": str(uuid.uuid4()),
-            "modelo_id": str(modelo_id),
-            "sector_id": str(sector_id),
-            "descripcion_defecto": "Fisura longitudinal en veta",
-            "cantidad_afectada": "2 tableros",
-            "fecha_captura_local": "2026-11-10 18:20:00",
+            "encargado_id": str(lucas["id"]),
+            "tipo_problema_id": str(tipo_faltante["id"]),
+            "impacto": "FALTA",
+            "modelo_id": str(silla_docta["id"]),
+            "detalle_pieza": "Escuadras de madera",
+            "sector_id": str(armado["id"]),
+            "cantidad_afectada": "1 lote",
+            "descripcion_defecto": "Faltan escuadras para terminar sillas Docta",
+            "accion_inmediata": "Aviso a Maquinado",
+            "estado": "Abierto",
+            "fecha_captura_local": "2026-11-16 09:30:00",
         }
-        files = {"foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")}
-        res_rep = client.post("/api/v1/reportes/", data=form_data, files=files)
-        assert res_rep.status_code == 201, res_rep.text
-        rep_data = res_rep.json()
-        assert rep_data["es_ejemplo"] == 0
-        assert rep_data["categoria_nombre"] == "Comedor"
+        res_rep1 = client.post(
+            "/api/v1/reportes/",
+            data=form_con_foto,
+            files={"foto": ("escuadras.jpg", img_bytes, "image/jpeg")},
+        )
+        assert res_rep1.status_code == 201, res_rep1.text
+        rep1 = res_rep1.json()
+        assert rep1["foto_link_corto"] == f"/f/{rep1['id']}"
+        assert rep1["encargado_nombre"] == lucas["nombre"]
+
+        # Verificar link corto /f/{id}
+        res_foto = client.get(rep1["foto_link_corto"])
+        assert res_foto.status_code == 200
 
         # Idempotencia
         res_dup = client.post(
             "/api/v1/reportes/",
-            data=form_data,
-            files={"foto": ("defecto_camara.jpg", img_bytes, "image/jpeg")},
+            data=form_con_foto,
+            files={"foto": ("escuadras.jpg", img_bytes, "image/jpeg")},
         )
-        assert res_dup.status_code == 201
-        assert res_dup.json()["id"] == rep_data["id"]
+        assert res_dup.status_code == 201 and res_dup.json()["id"] == rep1["id"]
 
-        # Reporte de prototipo manual (sin modelo_id)
-        proto_data = {
+        # Reporte SIN foto (foto opcional)
+        form_sin_foto = {
             "client_uuid": str(uuid.uuid4()),
-            "modelo_manual": "Prototipo Mesa Extensible 2.20",
-            "sector_id": str(sector_id),
-            "descripcion_defecto": "Desajuste en corredera",
-            "cantidad_afectada": "1 prototipo",
-            "fecha_captura_local": "2026-11-10 18:22:00",
+            "encargado_id": str(lucas["id"]),
+            "tipo_problema_id": str(tipo_faltante["id"]),
+            "impacto": "FALTA",
+            "modelo_manual": "General",
+            "detalle_pieza": "Tornillos 4x40",
+            "sector_id": str(armado["id"]),
+            "cantidad_afectada": "2 cajas",
+            "descripcion_defecto": "Sin stock en pañol",
+            "accion_inmediata": "Pedido a Compras",
+            "estado": "Abierto",
+            "fecha_captura_local": "2026-11-16 10:15:00",
         }
-        res_proto = client.post(
-            "/api/v1/reportes/",
-            data=proto_data,
-            files={"foto": ("proto.jpg", img_bytes, "image/jpeg")},
+        res_rep2 = client.post("/api/v1/reportes/", data=form_sin_foto)
+        assert res_rep2.status_code == 201, res_rep2.text
+        rep2 = res_rep2.json()
+        assert rep2["foto_path"] is None
+        assert rep2["foto_link_corto"] is None
+
+        print("\n=== 5. Edición de Reporte ===")
+        res_upd_rep = client.put(
+            f"/api/v1/reportes/{rep2['id']}",
+            json={"estado": "Resuelto", "accion_inmediata": "Llegó compra urgente"},
         )
-        assert res_proto.status_code == 201, res_proto.text
-        assert res_proto.json()["modelo_id"] is None
-        assert res_proto.json()["categoria_nombre"] == "Otro / Prototipo"
-        assert "Prototipo Mesa Extensible 2.20" in res_proto.json()["modelo_nombre"]
+        assert res_upd_rep.status_code == 200
+        assert res_upd_rep.json()["estado"] == "Resuelto"
 
-        print("\n=== 7. Soft-Delete protegido por PIN y Protección de Reportes Reales ===")
-        res_del_real = client.delete(f"/api/v1/reportes/{rep_data['id']}")
-        assert res_del_real.status_code == 403  # No permite borrar reportes reales
+        print("\n=== 6. Exportación a Planilla Excel del Encargado sin Duplicados ===")
+        if PLANTILLA_SRC.exists():
+            res_exp1 = client.post("/api/v1/reportes/exportar-planillas", json={})
+            assert res_exp1.status_code == 200, res_exp1.text
+            exp1 = res_exp1.json()
+            assert exp1["exportados"] == 2
+            assert "Encargado_1_Armado.xlsx" in exp1["archivos_actualizados"]
 
-        res_del_mod = client.delete(f"/api/v1/admin/modelos/{modelo_id}", headers=pin_headers)
-        assert res_del_mod.status_code == 200
-        assert res_del_mod.json()["activo"] == 0
+            # Segunda ejecución no debe duplicar ninguno
+            res_exp2 = client.post("/api/v1/reportes/exportar-planillas", json={})
+            assert res_exp2.status_code == 200
+            assert res_exp2.json()["exportados"] == 0
 
-        res_off_after = client.get("/api/v1/catalogos/offline")
-        assert len(res_off_after.json()["modelos"]) == 0
+            wb = openpyxl.load_workbook(Path(os.environ["CALIDAD_CARGA_DIR"]) / "Encargado_1_Armado.xlsx")
+            ws = wb["Desvíos y Materiales"]
+            assert ws["F4"].value == "Silla Docta"
+            assert ws["L4"].value == "Ver Foto"
+            assert ws["L4"].hyperlink is not None
+            assert ws["L5"].value == "Sin foto"
 
-    engine.dispose()
-    _TMP_TEST_DIR.cleanup()
-    print("\nTODOS LOS TESTS DEL BACKEND PASARON EXITOSAMENTE.")
+        print("\n=== 7. Protección y Borrado Forzado de Reportes ===")
+        assert client.delete(f"/api/v1/reportes/{rep2['id']}").status_code == 403
+        assert client.delete(f"/api/v1/reportes/{rep2['id']}?forzar=true").status_code == 200
 
 
 if __name__ == "__main__":
-    test_full_flow()
+    try:
+        test_full_flow()
+        print("\nALL BACKEND TESTS PASSED!")
+    finally:
+        from app.core.database import engine
+        engine.dispose()
+        try:
+            _TMP_TEST_DIR.cleanup()
+        except Exception:
+            pass

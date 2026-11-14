@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Camera, Image as ImageIcon, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
+import { Camera, Upload, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { compressImage } from '../services/compressor';
 
 export function CameraCapture({ onPhotoCaptured, currentPhoto, onClearPhoto }) {
-  const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
+  const galleryInputRef = useRef(null);
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressInfo, setCompressInfo] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
@@ -28,52 +29,71 @@ export function CameraCapture({ onPhotoCaptured, currentPhoto, onClearPhoto }) {
       setErrorMsg(err.message || 'Error al procesar la foto.');
     } finally {
       setIsCompressing(false);
-      // Limpiar input para permitir seleccionar la misma foto si se desea
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const triggerCamera = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
+      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (galleryInputRef.current) galleryInputRef.current.value = '';
     }
   };
 
   return (
     <div className="camera-capture-container">
-      {/* Input nativo oculto que dispara la cámara oficial del celular */}
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
+        id="input-foto-camara"
         type="file"
         accept="image/*"
         capture="environment"
         onChange={handleFileChange}
-        style={{ display: 'none' }}
+        className="visually-hidden"
+        tabIndex={-1}
+      />
+
+      <input
+        ref={galleryInputRef}
+        id="input-foto-galeria"
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        className="visually-hidden"
+        tabIndex={-1}
       />
 
       {!currentPhoto && !isCompressing && (
-        <button
-          type="button"
-          onClick={triggerCamera}
-          className="btn-camera-trigger"
-        >
-          <Camera size={28} className="camera-icon" />
-          <div className="camera-trigger-texts">
-            <span className="camera-main-text">Capturar Foto del Defecto</span>
-            <span className="camera-sub-text">Abre la cámara trasera en 1 toque</span>
-          </div>
-        </button>
+        <div className="photo-dual-actions">
+          <button
+            type="button"
+            onClick={() => cameraInputRef.current?.click()}
+            className="btn-camera-trigger"
+          >
+            <Camera size={24} className="camera-icon" />
+            <div className="camera-trigger-texts">
+              <span className="camera-main-text">Sacar Foto</span>
+              <span className="camera-sub-text">Abre la cámara del celular</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => galleryInputRef.current?.click()}
+            className="btn-gallery-trigger"
+          >
+            <Upload size={22} className="camera-icon" />
+            <div className="camera-trigger-texts">
+              <span className="camera-main-text">Subir / WhatsApp</span>
+              <span className="camera-sub-text">Elegir imagen de galería o PC</span>
+            </div>
+          </button>
+        </div>
       )}
 
       {isCompressing && (
-        <div className="camera-compressing-box">
+        <div className="camera-compressing-box" role="status" aria-live="polite">
           <Loader2 size={24} className="spin-icon" />
-          <span>Comprimiendo foto para guardado ultra-rápido...</span>
+          <span>Comprimiendo foto para guardado rápido...</span>
         </div>
       )}
 
       {errorMsg && (
-        <div className="alert-error-box">
+        <div className="alert-error-box" role="alert">
           <span>{errorMsg}</span>
         </div>
       )}
@@ -81,7 +101,7 @@ export function CameraCapture({ onPhotoCaptured, currentPhoto, onClearPhoto }) {
       {currentPhoto && (
         <div className="photo-preview-card">
           <div className="preview-image-wrapper">
-            <img src={currentPhoto.previewUrl} alt="Defecto capturado" className="preview-img" />
+            <img src={currentPhoto.previewUrl} alt="Foto del problema" className="preview-img" />
           </div>
           <div className="photo-preview-details">
             <div className="photo-status-badge">
@@ -92,11 +112,19 @@ export function CameraCapture({ onPhotoCaptured, currentPhoto, onClearPhoto }) {
             <div className="preview-actions">
               <button
                 type="button"
-                onClick={triggerCamera}
+                onClick={() => cameraInputRef.current?.click()}
                 className="btn-secondary-action"
               >
-                <Camera size={16} />
-                <span>Volver a sacar</span>
+                <Camera size={15} />
+                <span>Cámara</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                className="btn-secondary-action"
+              >
+                <Upload size={15} />
+                <span>Galería</span>
               </button>
               <button
                 type="button"
@@ -106,7 +134,7 @@ export function CameraCapture({ onPhotoCaptured, currentPhoto, onClearPhoto }) {
                 }}
                 className="btn-danger-action"
               >
-                <Trash2 size={16} />
+                <Trash2 size={15} />
                 <span>Quitar</span>
               </button>
             </div>
